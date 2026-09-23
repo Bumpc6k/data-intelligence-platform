@@ -188,6 +188,15 @@
   .seg button{border:0;background:transparent;padding:5px 11px;font:inherit;font-size:12.5px;color:var(--dim);cursor:pointer}
   .seg button.on{background:var(--accbg);color:var(--acc);font-weight:600}
   .toolbar input{border:1px solid var(--line);border-radius:8px;padding:5px 10px;font:inherit;font-size:12.5px;width:260px;background:var(--panel)}
+
+  /* ===== 可拖动分隔条（侧栏自由调整宽度，宽度记进 localStorage）===== */
+  .split{flex:none;width:6px;cursor:col-resize;background:transparent;position:relative;z-index:5}
+  .split::after{content:'';position:absolute;inset:0 2px;border-radius:2px;background:var(--line);transition:.12s}
+  .split:hover::after,.split.dragging::after{background:var(--acc);inset:0 1px}
+  .lvg{cursor:grab}
+  .lvg.panning{cursor:grabbing}
+  .lvg .panwrap{position:absolute;inset:0;transform-origin:0 0}
+  .lvg .panhint{position:absolute;right:8px;bottom:6px;font-size:10px;color:var(--dim2);pointer-events:none}
 </style>
 <script>
 /* 主题初始化放在最前：先读偏好再渲染，避免闪白（§4.2）*/
@@ -233,6 +242,8 @@
     <div class="ft">dev 身份 · 规则模式<br>内核 18080 <span class="dot"></span></div>
   </div>
 
+  <div class="split" id="split-left" title="拖动调整会话列表宽度"></div>
+
   <!-- ================= 屏 1：对话工作台 ================= -->
   <div class="body" id="page-chat" style="flex:1;min-height:0">
     <div class="center">
@@ -251,6 +262,8 @@
         <div class="hint">回答必须带可点开的凭证 · 未配 LLM key 时以规则模式运行，数据仍来自真实内核</div>
       </div>
     </div>
+
+    <div class="split" id="split-right" title="拖动调整右侧证据面板宽度"></div>
 
     <!-- 右面板：证据画布 + 会话上下文（101 的右栏合并进来） -->
     <div class="right">
@@ -387,6 +400,8 @@ function draw(boxId, NODES, LINKS, CHAIN, H){
   var box = document.getElementById(boxId);
   if(!box) return;
   box.innerHTML = '';
+  if (window.__ensurePan) window.__ensurePan(box);
+  const _layer = box.querySelector('.panwrap') || box;
   box.style.height = H + 'px';
   /* 列宽取容器 1/4，节点在列内**居中**、宽度自适应 —— 保证最后一列不会被顶出容器 */
   var W = box.clientWidth || 620, colW = W/4, ndW = Math.min(colW - 20, 180);
@@ -396,7 +411,7 @@ function draw(boxId, NODES, LINKS, CHAIN, H){
   COLS.forEach(function(c,i){
     var h = document.createElement('div');
     h.className='colh'; h.textContent=c; h.style.left=(i*colW + pad)+'px';
-    box.appendChild(h);
+    _layer.appendChild(h);
   });
   var pos = {};
   NODES.forEach(function(n){
@@ -408,7 +423,7 @@ function draw(boxId, NODES, LINKS, CHAIN, H){
     d.innerHTML = n.t + '<span class="lb">' + n.lb + '</span>';
     d.title = n.f + '（点击查看详情）';
     d.onclick = function(){ d.classList.toggle('sel'); };
-    box.appendChild(d);
+    _layer.appendChild(d);
     pos[n.id] = { x:n.x*colW + pad, y:top0 + n.y*rowH, w:ndW, h:34 };
   });
   LINKS.forEach(function(l){
@@ -421,9 +436,16 @@ function draw(boxId, NODES, LINKS, CHAIN, H){
     e.className = 'ln' + ((CHAIN[l[0]] && CHAIN[l[1]]) ? ' hl' : '');
     e.style.left = x1 + 'px'; e.style.top = y1 + 'px'; e.style.width = len + 'px';
     e.style.transform = 'rotate(' + Math.atan2(y2-y1, x2-x1) + 'rad)';
-    box.appendChild(e);
+    _layer.appendChild(e);
   });
 }
+window.drawAll = function(){
+  const chat = document.getElementById('page-chat');
+  if (chat && !chat.classList.contains('hidden')) { draw('lvg', NODES, LINKS, CHAIN, 300); }
+  const lin = document.getElementById('page-lineage');
+  if (lin && !lin.classList.contains('hidden')) { draw('lvg2', NODES2, LINKS2, CHAIN2, 330); }
+};
+
 window.addEventListener('resize', function(){
   if(!document.getElementById('page-chat').classList.contains('hidden')) pick('graph');
   if(!document.getElementById('page-lineage').classList.contains('hidden')) draw('lvg2', NODES2, LINKS2, CHAIN2, 330);
@@ -440,7 +462,121 @@ pick('graph');   /* 必须在 NODES/LINKS 赋值之后调用 */
 </script>
 
 <script>
-/* ================= B4 静态迭代版：接真接口 ================= */
+
+/* ================= B4 静态迭代 v2 ================= */
+/* ① 侧栏拖动：会话列 / 右面板宽度可自由调整，双击分隔条复位，宽度记进 localStorage */
+(function () {
+  const KEY = 'dip-layout-v1';
+  const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
+  const convs = document.getElementById('convs');
+  const right = document.querySelector('.right');
+  const app = document.body;
+  const apply = (el, v) => { if (el && v) el.style.flex = '0 0 ' + v + 'px'; };
+  apply(convs, saved.convs); apply(right, saved.right);
+
+  function bind(splitId, target, side, min, max) {
+    const bar = document.getElementById(splitId);
+    if (!bar || !target) return;
+    bar.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      bar.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      const startX = e.clientX, startW = target.getBoundingClientRect().width;
+      const move = (ev) => {
+        const delta = side === 'left' ? ev.clientX - startX : startX - ev.clientX;
+        const w = Math.max(min, Math.min(max, startW + delta));
+        target.style.flex = '0 0 ' + w + 'px';
+        if (typeof drawAll === 'function') drawAll();
+      };
+      const up = () => {
+        bar.classList.remove('dragging');
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        const store = JSON.parse(localStorage.getItem(KEY) || '{}');
+        store[target.id === 'convs' ? 'convs' : 'right'] = Math.round(target.getBoundingClientRect().width);
+        localStorage.setItem(KEY, JSON.stringify(store));
+        if (typeof drawAll === 'function') drawAll();
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+    bar.addEventListener('dblclick', () => {
+      target.style.flex = '';
+      const store = JSON.parse(localStorage.getItem(KEY) || '{}');
+      delete store[target.id === 'convs' ? 'convs' : 'right'];
+      localStorage.setItem(KEY, JSON.stringify(store));
+      if (typeof drawAll === 'function') drawAll();
+    });
+  }
+  bind('split-left', convs, 'left', 140, 420);
+  bind('split-right', right, 'right', 320, Math.round(window.innerWidth * 0.7));
+  window.addEventListener('resize', () => { if (typeof drawAll === 'function') drawAll(); });
+})();
+
+/* ② 血缘画布：拖拽平移 + 滚轮缩放（抓手光标，双击复位） */
+(function () {
+  const boxes = () => Array.from(document.querySelectorAll('.lvg'));
+  function ensure(box) {
+    let w = box.querySelector('.panwrap');
+    if (!w) {
+      w = document.createElement('div'); w.className = 'panwrap'; box.appendChild(w);
+      const hint = document.createElement('div'); hint.className = 'panhint'; hint.textContent = '拖动平移 · 滚轮缩放 · 双击复位';
+      box.appendChild(hint);
+      const st = { x: 0, y: 0, k: 1 };
+      w.dataset.t = JSON.stringify(st);
+      const apply = () => { const s = JSON.parse(w.dataset.t); w.style.transform = `translate(${s.x}px,${s.y}px) scale(${s.k})`; };
+      box.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.nd')) return;   // 点节点不当作平移
+        e.preventDefault(); box.classList.add('panning');
+        const sx = e.clientX, sy = e.clientY, s0 = JSON.parse(w.dataset.t);
+        const move = (ev) => {
+          w.dataset.t = JSON.stringify({ x: s0.x + ev.clientX - sx, y: s0.y + ev.clientY - sy, k: s0.k }); apply();
+        };
+        const up = () => { box.classList.remove('panning'); document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+        document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+      });
+      box.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const s = JSON.parse(w.dataset.t);
+        const k = Math.max(0.4, Math.min(2.5, s.k * (e.deltaY < 0 ? 1.12 : 0.89)));
+        w.dataset.t = JSON.stringify({ ...s, k }); apply();
+      }, { passive: false });
+      box.addEventListener('dblclick', () => { w.dataset.t = JSON.stringify({ x: 0, y: 0, k: 1 }); apply(); });
+    }
+    return w;
+  }
+  window.panTargets = () => boxes().map(ensure);
+  document.addEventListener('DOMContentLoaded', () => setTimeout(() => boxes().forEach(ensure), 200));
+  window.__ensurePan = ensure;
+})();
+
+/* ③ 全静态：内置一份**真实内核返回**的演示数据 —— 没有后端也能完整演示，且明确标注"静态演示" */
+const STATIC_DEMO = {
+  "answer_id": "ans_static_demo",
+  "text": "产量 = 打码量 + 跳码量 - 重码量。忠实表达式：产量 = SUM(打码量) + SUM(跳码量) - SUM(重码量)。公式不在 ads.ads_产销存月报 本层，而在 cdw.dwd_卷烟产量码段明细（dwd 层）；上游层次：ods → dwd → dws → dim。",
+  "result": {
+    "value": {"type": "formula", "display": "产量 = 打码量 + 跳码量 - 重码量", "expr": "产量 = SUM(打码量) + SUM(跳码量) - SUM(重码量)"},
+    "confidence": 0.9, "status": "verified",
+    "evidence": [
+      {"type": "lineage", "ref": "graph:ads.ads_产销存月报", "summary": "上游 9 张 / 13 条边", "endpoint": "POST /upstream"},
+      {"type": "dict", "ref": "dict:ads.ads_产销存月报.output_qty", "summary": "产量（词表命中 · 置信度 1.0）", "endpoint": "POST /kb/search"},
+      {"type": "metric", "ref": "metric:产量@chanliang_qty", "summary": "产量 = 打码量 + 跳码量 - 重码量 · 口径在 cdw.dwd_卷烟产量码段明细", "endpoint": "POST /kb/search"}
+    ],
+    "source": {"kind": "kernel", "file": "examples/warehouse/ads/ads_产销存月报.sql", "line": null},
+    "version": "kb:1.0.0@2026-09-20"
+  },
+  "suggestions": ["改 ads.ads_产销存月报.output_qty 会砸哪些下游？", "cdw.dwd_卷烟产量码段明细 的这张口径表还有哪些字段？"],
+  "tool_calls": [
+    {"name": "search", "args": {"keyword": "ads.ads_产销存月报 产量"}, "ms": 14, "ok": true, "endpoint": "POST /kb/search"},
+    {"name": "search", "args": {"keyword": "产量"}, "ms": 8, "ok": true, "endpoint": "POST /kb/search"},
+    {"name": "upstream", "args": {"table": "ads.ads_产销存月报"}, "ms": 1, "ok": true, "endpoint": "POST /upstream"}
+  ],
+  "mode": "rule"
+};
+const FORCE_STATIC = new URLSearchParams(location.search).has('static') || location.protocol === 'file:';
+let STATIC_MODE = FORCE_STATIC;
+
 const API = (location.origin.startsWith('http') ? location.origin : 'http://127.0.0.1:18100');
 let SESSION = 'demo-' + Math.random().toString(36).slice(2, 8);
 const STATUS_CN = {verified:'已核实', inferred:'推导', candidate:'候选', unresolved:'证据不足', stale:'快照过期'};
@@ -509,7 +645,15 @@ function renderAnswer(a, question) {
   setTimeout(() => { concl.onclick = () => pick(a.result.value && a.result.value.type==='formula' ? 'metric' : 'graph'); }, 0);
 }
 
+function setStaticBadge(reason) {
+  const b = $('#apibadge');
+  b.className = 'tg w';
+  b.innerHTML = '<span class="dot"></span>静态演示（无后端）';
+  b.title = '未连接 portal-api：页面使用内置的真实内核返回样例渲染。起后端后自动切换为实时数据。' + (reason ? '｜原因：' + reason : '');
+}
+
 async function checkHealth() {
+  if (FORCE_STATIC) { setStaticBadge('强制静态模式'); return; }
   const badge = $('#apibadge');
   try {
     const r = await fetch(API + '/api/health'); const j = await r.json();
@@ -537,11 +681,10 @@ async function ask(text) {
     ph.remove(); renderAnswer(a, text);
   } catch (e) {
     ph.remove();
-    const m = el('div','msg');
-    m.append(Object.assign(el('div','who2'), {innerHTML:'<span class="av ai">◈</span> 数据智能平台'}));
-    m.append(Object.assign(el('div','concl'), {innerHTML:'<div class="f">接口不可用：' + String(e) + '</div>'}));
-    m.append(el('div','meta','前端不会回退成编造数据 —— 请先起 portal-api（bash ops/dev.sh）'));
-    stream.append(m);
+    if (!STATIC_MODE) { STATIC_MODE = true; setStaticBadge(String(e)); }
+    const a = JSON.parse(JSON.stringify(STATIC_DEMO));
+    a.text = text === STATIC_DEMO.suggestions[0] ? '下游影响面来自血缘图（静态演示数据）：cdw.dws_产销存汇总 下游 4 张表 / 5 条边。' : a.text;
+    renderAnswer(a, text);
   }
 }
 
@@ -550,7 +693,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btn) btn.onclick = () => { ask(ta.value); ta.value = ''; };
   if (ta) ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(ta.value); ta.value=''; } });
   checkHealth();
-  ask('ads.ads_产销存月报 的产量怎么来的？');   // 进页面就跑一次真实问答，便于演示与截图
+  if (FORCE_STATIC) { setStaticBadge('强制静态模式'); renderAnswer(JSON.parse(JSON.stringify(STATIC_DEMO)), 'ads.ads_产销存月报 的产量怎么来的？'); }
+  else ask('ads.ads_产销存月报 的产量怎么来的？');   // 进页面就跑一次真实问答，便于演示与截图
 });
 </script>
 
