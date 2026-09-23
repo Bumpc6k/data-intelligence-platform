@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from dip_agent import Agent
 from fakes import FakeKernel
@@ -126,7 +128,8 @@ requires_pg = pytest.mark.skipif(not store_mod.available(), reason="PostgreSQL �
 @requires_pg
 def test_store_roundtrip_against_real_postgres():
     store_mod.init_schema()
-    session_id = "pytest-store-roundtrip"
+    # 每次跑用唯一会话，避免历史累积导致断言不稳定（同库反复跑也没问题）
+    session_id = "pytest-roundtrip-" + uuid.uuid4().hex[:8]
     answer = {
         "text": "产量 = 打码量 + 跳码量 - 重码量",
         "mode": "rule",
