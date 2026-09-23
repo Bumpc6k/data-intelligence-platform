@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安装依赖
+        run: |
+          python -m pip install -q -U pip
+          pip install -q -e ".[api,dev]"
+      - name: Lint
+        run: ruff check .
+      - name: 单元 + 契约测试（不需要内核）
+        run: pytest -q
+
+  kernel-smoke:
+    # 冒烟需要真实内核服务；没配好就跳过（不阻塞合并），配好后把变量打开即可
+    if: ${{ vars.KERNEL_CI_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -q -e ".[api,dev]"
+      - name: 内核冒烟
+        env:
+          LINEAGE_BASE: ${{ secrets.LINEAGE_BASE }}
+        run: pytest -m smoke -rs

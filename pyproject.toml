@@ -1,0 +1,44 @@
+[project]
+name = "data-intelligence-platform"
+version = "0.1.0"
+description = "数据智能平台（对话优先 + Evidence-first）：纳管调度资产、串联血缘与业务口径，回答必带凭证"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "么慌" }]
+dependencies = [
+  "httpx>=0.27",
+  "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.111", "uvicorn[standard]>=0.30"]
+dev = ["pytest>=8.2", "pytest-asyncio>=0.23", "ruff>=0.5"]
+
+# 说明：P1 不做 pip 安装，直接用 pytest 的 pythonpath 把各单元挂上（单元可独立部署，但源码树共享）。
+# 因此这里只保留工具配置，不写 build-system。
+[tool.pytest.ini_options]
+pythonpath = [
+  ".",
+  "apps/portal-api/src",
+  "packages/dip-contracts/src",
+  "packages/dip-core/src",
+  "packages/dip-agent/src",
+  "integrations/lineage-client/src",
+]
+testpaths = ["tests", "integrations/lineage-client/tests", "packages"]
+addopts = "-q --strict-markers"
+markers = [
+  "smoke: 需要真实内核服务（不在则跳过）",
+]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 118
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
