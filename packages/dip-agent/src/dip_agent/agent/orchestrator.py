@@ -71,6 +71,15 @@ class Agent:
             results.append((step, method(**step.args)))
         return results
 
+    # ---------------- 上下文（供 API 层从库里回填，见 W-112） ----------------
+    def context_tables(self, session_id: str) -> list[str]:
+        return self._contexts.get(session_id, Context()).tables
+
+    def seed_context(self, session_id: str, *, tables: list[str], columns: list[str] | None = None) -> None:
+        ctx = self._contexts.setdefault(session_id, Context())
+        ctx.tables = list(tables or [])
+        ctx.columns = list(columns or [])
+
     # ---------------- 对外 ----------------
     def ask(self, text: str, *, session_id: str = "default", mode: str = "rule") -> Answer:
         ctx = self._contexts.setdefault(session_id, Context())

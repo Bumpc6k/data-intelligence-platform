@@ -13,11 +13,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from lineage_client import LineageClient
 
-from .routers import agent, health, lineage, reports
+from . import store
+from .routers import agent, audit, health, lineage, reports
 
 settings = load_settings()
 
-app = FastAPI(title="数据智能平台 · portal-api", version="0.1.0")
+app = FastAPI(title="数据智能平台 · portal-api", version="0.2.0")
+
+# 启动时幂等建表（数据库不可用不影响平台可用，界面会提示"未落库"）
+try:
+    store.init_schema()
+except Exception as exc:  # noqa: BLE001
+    print(f"[portal-api] 数据库不可用，审计将不落库：{exc}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5190"],
@@ -28,6 +35,7 @@ app.include_router(health.router)
 app.include_router(agent.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(lineage.router, prefix="/api")
+app.include_router(audit.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])
