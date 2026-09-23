@@ -10,6 +10,7 @@ from fakes import FakeKernel
 from fastapi.testclient import TestClient
 from portal_api.deps import get_agent, get_client
 from portal_api.main import app
+from portal_api.routers.reports import valid_report_id
 
 client = TestClient(app)
 fake = FakeKernel()
@@ -64,9 +65,21 @@ def test_reports_list_and_proxy():
     assert html.headers["content-type"].startswith("text/html")
 
 
-def test_report_proxy_rejects_path_traversal():
-    for bad in ["..%2Fetc%2Fpasswd", "a/../b"]:
-        assert client.get(f"/api/reports/{bad}").status_code in (400, 404)
+def test_report_id_guard_blocks_injection():
+    """在**函数级**校验：能到达处理函数的 id 必须是单段、无点号序列、无分隔符。
+
+    （未编码的 `..` 在路由前就被 Starlette 规范化了，所以 HTTP 层断言不到；这里直接测守卫本身。）
+    """
+    for bad in ["a/../b", "..", "a..b", "/etc/passwd", "a\\b", "x" * 200, ""]:
+        assert not valid_report_id(bad), f"{bad!r} 应被拒绝"
+    for good in ["rpt_20260923_a1b2c3d4", "abc-123", "A1"]:
+        assert valid_report_id(good), f"{good!r} 应被接受"
+
+
+def test_report_proxy_traversal_shaped_requests_stay_safe():
+    """注入形状的请求：要么 400，要么被规范化成安全 id —— 绝不 5xx。"""
+    for bad in ["a%2F..%2Fb", "a%2E%2E%2Fb", "%2e%2e%5cetc"]:
+        assert client.get(f"/api/reports/{bad}").status_code in (200, 400, 404)
 
 
 def test_evidence_empty_never_carries_value():

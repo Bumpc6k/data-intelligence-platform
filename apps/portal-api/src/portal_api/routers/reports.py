@@ -25,9 +25,18 @@ def list_reports(client: Annotated[LineageClient, Depends(get_client)]) -> dict:
     return r.data
 
 
+def valid_report_id(report_id: str) -> bool:
+    """只允许"单段"报告 id：不含路径分隔符、不含点号序列（防把内核地址拼到别的路径）。"""
+    if not report_id or len(report_id) > 128:
+        return False
+    if any(ch in report_id for ch in "/\\.."):
+        return False
+    return all(ch.isalnum() or ch in "_-" for ch in report_id)
+
+
 @router.get("/{report_id}", response_class=HTMLResponse)
 def get_report(report_id: str, client: Annotated[LineageClient, Depends(get_client)]) -> HTMLResponse:
-    if not report_id or len(report_id) > 128 or any(ch in report_id for ch in "/\\.."):
+    if not valid_report_id(report_id):
         raise HTTPException(status_code=400, detail="report_id 非法")
     url = client.report_url(report_id)
     resp = client.raw_get(url)
