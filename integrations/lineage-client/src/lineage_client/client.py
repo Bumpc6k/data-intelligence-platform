@@ -172,6 +172,17 @@ class LineageClient:
         """报告的可点击地址（注意：容器场景下内核会给出 internal_url）。"""
         return f"{self.base_url}/report/{report_id}"
 
+    def raw_get(self, url: str) -> str | None:
+        """取任意内核路径的原始文本（目前只给报告代理用）。
+
+        为什么不让业务层自己拼 httpx：内网地址、超时、错误处理都应关在这里。
+        """
+        try:
+            resp = self._client.get(url, timeout=TIMEOUTS.get("/report", 15.0))
+        except httpx.HTTPError:
+            return None
+        return resp.text if resp.status_code == 200 else None
+
     # ---------- 健康 ----------
     def health(self) -> ToolResult:
         return self._call("GET", "/health")
