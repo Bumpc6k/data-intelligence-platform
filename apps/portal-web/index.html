@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>定稿原型 · 数据智能平台（对话优先 + Evidence-first）</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#fff; --bg2:#f7f8fa; --bg3:#fbfcfd; --line:#e6e8ec; --line2:#eff1f4;
+    --fg:#14181f; --dim:#5b6472; --dim2:#6b7482; --acc:#4f46e5; --accbg:#eef1ff;
+    --ok:#0b7a4d; --okbg:#eefaf3; --warn:#b45309; --warnbg:#fef7ec; --blue:#0e7490; --bluebg:#ecfeff;
+    --ods:#8b5cf6; --dwd:#2563eb; --dws:#0d9488; --ads:#d97706; --dimc:#94a3b8;
+    --panel:#fff; --hover:#eef0f3; --sel:#e9edf3; --chip:#e9ecf1; --fg2:#374151;
+    --accbg2:#fafbff; --ring:#e6e9ff; --hlbg:#fffaf0; --hlring:#fdeccb; --edge:#ccd3dd;
+    --codebg:#f2f3f6; --warnfg:#92400e; --panel-tint:#f4f5f7;
+    --brand1:#6366f1; --brand2:#0ea5e9; --brand-fg:#fff;
+    --okline:#cdeadd; --warnline:#f0d9b5;
+  }
+  body{font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);
+       color:var(--fg);height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+  /* 深色主题：只换令牌，不动组件（§4.2） */
+  html[data-theme="dark"]{
+    color-scheme: dark;
+    --bg:#0f1216; --bg2:#14181d; --bg3:#171b21; --panel:#181d24;
+    --line:#2a313a; --line2:#232a33;
+    --fg:#e6e9ee; --fg2:#c9d0da; --dim:#9aa3b0; --dim2:#8b94a3;
+    --acc:#8b9cff; --accbg:#1e2544; --accbg2:#171d33; --ring:#2b3564;
+    --ok:#34d399; --okbg:#102a22; --warn:#f0b429; --warnbg:#2c2413; --warnfg:#f7cf8a;
+    --blue:#5ad1e8; --bluebg:#102a30;
+    --hover:#1e242c; --sel:#222a34; --chip:#242c36; --panel-tint:#1e242c;
+    --hlbg:#2c2413; --hlring:#5a4a1e; --edge:#3a434f; --codebg:#1e242c;
+    --okline:#1e4a38; --warnline:#5a4a1e;
+    --ods:#a78bfa; --dwd:#60a5fa; --dws:#2dd4bf; --ads:#fbbf24; --dimc:#94a3b8;
+  }
+  ::placeholder{color:var(--dim2);opacity:1}
+  input,textarea{color:var(--fg)}
+  code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;background:var(--codebg);border-radius:5px;padding:1px 6px;color:var(--fg2)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+
+  /* ===== 顶栏 ===== */
+  header{height:54px;flex:none;display:flex;align-items:center;gap:11px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .lg{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--brand1),var(--brand2));color:var(--brand-fg);display:grid;place-items:center;font-size:14px}
+  header b{font-size:14.5px}
+  header .sp{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--dim)}
+  .tg{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12.5px;background:var(--panel)}
+  .tg.w{color:var(--warn);border-color:var(--warnline);background:var(--warnbg)}
+  .tg.ok{color:var(--ok);border-color:var(--okline);background:var(--okbg)}
+  .who{display:flex;align-items:center;gap:6px}
+  .who i{width:22px;height:22px;border-radius:50%;background:var(--chip);display:grid;place-items:center;font-size:11px;font-style:normal;color:var(--dim)}
+
+  .body{flex:1;display:flex;min-height:0}
+
+  /* ===== 窄导航 ===== */
+  .nav{width:56px;flex:none;background:var(--bg3);border-right:1px solid var(--line);display:flex;flex-direction:column;
+       align-items:center;gap:5px;padding:10px 0}
+  .ni{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;color:var(--dim2);cursor:pointer;font-size:16px;position:relative}
+  .ni:hover{background:var(--hover);color:var(--fg)}
+  .ni.on{background:var(--accbg);color:var(--acc)}
+  .ni.on::before{content:'';position:absolute;left:-10px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--acc)}
+  .nav .sp{margin-top:auto}
+
+  /* ===== 会话列 ===== */
+  .convs{width:228px;flex:none;border-right:1px solid var(--line);background:var(--bg2);display:flex;flex-direction:column}
+  .convs .hd{padding:12px 14px 7px;font-size:11.5px;color:var(--dim2);letter-spacing:.05em}
+  .newb{margin:0 12px 8px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel);
+        font-size:13px;cursor:pointer;text-align:center}
+  .newb:hover{border-color:var(--acc);color:var(--acc)}
+  .cv{padding:8px 14px;font-size:13px;color:var(--dim);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cv:hover{background:var(--hover)}
+  .cv.on{background:var(--sel);color:var(--fg);font-weight:600}
+  .convs .ft{margin-top:auto;border-top:1px solid var(--line);padding:10px 14px;font-size:11.5px;color:var(--dim2);line-height:1.8}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:5px}
+
+  /* ===== 主区 ===== */
+  main{flex:1;display:flex;min-width:0}
+  .center{flex:1;display:flex;flex-direction:column;min-width:0}
+  .ch{flex:none;height:46px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid var(--line)}
+  .ch .t{font-weight:600;font-size:14px}
+  .ch .sp{margin-left:auto;font-size:12px;color:var(--dim2)}
+
+  .stream{flex:1;overflow:auto;padding:20px 22px 6px}
+  .msg{max-width:720px;margin-bottom:20px}
+  .who2{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim2);margin-bottom:6px}
+  .av{width:20px;height:20px;border-radius:50%;background:var(--chip);display:grid;place-items:center;font-size:10px;color:var(--dim)}
+  .av.ai{background:linear-gradient(135deg,var(--brand1),var(--brand2));color:var(--brand-fg)}
+  .me{font-size:15px;font-weight:500}
+
+  /* 工具步骤条 */
+  .steps{border:1px solid var(--line2);background:var(--bg3);border-radius:9px;padding:8px 11px;margin-bottom:11px;font-size:12.5px;cursor:pointer}
+  .step{display:flex;align-items:center;gap:8px;color:var(--dim)}
+  .step .d{width:14px;height:14px;border-radius:50%;background:var(--okbg);color:var(--ok);display:grid;place-items:center;font-size:9px}
+  .step .tt{margin-left:auto;color:var(--dim2);font-size:11.5px}
+  .sd{display:none;margin:7px 0 2px 22px;padding:8px 10px;background:var(--panel);border:1px solid var(--line2);border-radius:7px;
+      font-family:ui-monospace,monospace;font-size:11px;color:var(--dim);white-space:pre-wrap}
+  .steps.open .sd{display:block}
+
+  /* 结论 */
+  .concl{border-left:3px solid var(--acc);background:var(--accbg2);padding:11px 13px;border-radius:0 9px 9px 0;margin-bottom:11px;cursor:pointer;transition:.15s}
+  .concl:hover{background:var(--accbg)}
+  .concl .f{font-family:ui-monospace,monospace;font-size:14.5px;color:var(--fg)}
+  .bs{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;font-size:11.5px}
+  .b{border-radius:999px;padding:1px 8px;border:1px solid}
+  .b.ok{color:var(--ok);border-color:var(--okline);background:var(--okbg)}
+  .b.g{color:var(--dim);border-color:var(--line);background:var(--panel)}
+  .b.w{color:var(--warn);border-color:var(--warnline);background:var(--warnbg)}
+
+  /* 凭证行 */
+  .evlist{display:flex;flex-direction:column;gap:6px}
+  .ev{border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;background:var(--panel)}
+  .ev:hover{border-color:var(--acc);background:var(--accbg2)}
+  .ev.on{border-color:var(--acc);background:var(--accbg);box-shadow:0 0 0 2px var(--ring)}
+  .ev .k{color:var(--dim2);font-size:11.5px;margin-left:auto}
+  .pill{border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:12px;cursor:pointer;color:var(--dim);background:var(--panel)}
+  .pill:hover{border-color:var(--acc);color:var(--acc)}
+  .meta{color:var(--dim2);font-size:11.5px;border-top:1px solid var(--line2);margin-top:10px;padding-top:8px}
+
+  /* 输入 */
+  .comp{flex:none;border-top:1px solid var(--line);padding:12px 22px 16px;background:var(--bg3)}
+  .inp{border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 1px 3px rgba(16,24,40,.05);overflow:hidden}
+  .inp textarea{width:100%;border:0;outline:none;resize:none;height:50px;padding:12px 14px 4px;font:inherit;background:transparent}
+  .inp .bar{display:flex;align-items:center;gap:7px;padding:5px 9px 8px 11px;font-size:11.5px;color:var(--dim2)}
+  .pl2{border:1px solid var(--line);border-radius:999px;padding:2px 8px;cursor:pointer}
+  .pl2:hover{border-color:var(--acc);color:var(--acc)}
+  .bar .r{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .send{background:var(--acc);border:0;color:var(--brand-fg);border-radius:8px;padding:6px 14px;font-size:12.5px;cursor:pointer;font-weight:600}
+  .hint{font-size:11px;color:var(--dim2);margin-top:8px;text-align:center}
+
+  /* ===== 右侧面板（证据画布 + 会话上下文 合体）===== */
+  .right{width:45%;min-width:500px;flex:none;display:flex;flex-direction:column;background:var(--bg2);border-left:1px solid var(--line)}
+  .rh{flex:none;display:flex;align-items:center;gap:3px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .tab{padding:6px 12px;border-radius:8px;font-size:13px;color:var(--dim);cursor:pointer}
+  .tab:hover{background:var(--panel-tint)}
+  .tab.on{background:var(--accbg);color:var(--acc);font-weight:600}
+  .rh .sp{margin-left:auto;font-size:11.5px;color:var(--dim2)}
+  /* 常驻引用条（来自 101 的「会话上下文」，压缩成一行，点开即展开面板） */
+  .refbar{flex:none;display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--line);
+          background:var(--panel);font-size:11.5px;color:var(--dim);overflow-x:auto;white-space:nowrap}
+  .refbar .rc{display:flex;align-items:center;gap:5px;border:1px solid var(--line2);border-radius:999px;padding:1px 9px;cursor:pointer;background:var(--bg3)}
+  .refbar .rc:hover{border-color:var(--acc);color:var(--acc)}
+  .refbar .rc i{width:6px;height:6px;border-radius:50%;font-style:normal;display:inline-block}
+  .rp{flex:1;overflow:auto;padding:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:12px}
+  .card h4{font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+  .card h4 .sp{margin-left:auto;font-size:11.5px;color:var(--dim2);font-weight:400}
+  .hidden{display:none}
+
+  /* 血缘画布 */
+  .lvg{position:relative;background:var(--panel);border-radius:9px;border:1px solid var(--line2);overflow:hidden}
+  .nd{position:absolute;border:1px solid var(--line);border-radius:8px;height:34px;padding:5px 9px;background:var(--panel);
+      font-family:ui-monospace,monospace;font-size:10.5px;cursor:pointer;white-space:nowrap;transition:.15s}
+  .nd:hover{border-color:var(--acc)}
+  .nd.hl{border-color:var(--warn);background:var(--hlbg);box-shadow:0 0 0 2px var(--hlring)}
+  .nd.sel{border-color:var(--acc);background:var(--accbg);box-shadow:0 0 0 2px var(--ring)}
+  .nd .lb{display:block;font-family:-apple-system,sans-serif;font-size:9.5px;color:var(--dim2);line-height:1.3}
+  .ln{position:absolute;height:1.6px;background:var(--edge);transform-origin:0 0}
+  .ln.hl{background:var(--warn);height:2.2px;box-shadow:0 0 0 1px rgba(217,119,6,.12)}
+  .colh{position:absolute;top:5px;font-size:10px;color:var(--dim2);letter-spacing:.08em;font-weight:600}
+  .legend{display:flex;gap:12px;font-size:11.5px;color:var(--dim2);margin-top:8px;flex-wrap:wrap}
+  .legend i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:5px}
+
+  .fml{font-family:ui-monospace,monospace;font-size:13px;background:var(--accbg2);border:1px solid var(--ring);border-radius:8px;padding:9px 11px}
+  .fml2{font-family:ui-monospace,monospace;font-size:12px;color:var(--dim);margin-top:7px}
+  .kv{display:grid;grid-template-columns:80px 1fr;gap:4px 10px;font-size:12.5px;margin-top:9px}
+  .kv dt{color:var(--dim2)} .kv dd{font-family:ui-monospace,monospace;font-size:12px}
+  .rep{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:9px;padding:10px 12px;cursor:pointer;background:var(--panel)}
+  .rep:hover{border-color:var(--acc)}
+  .rep .ic{width:28px;height:28px;border-radius:8px;background:var(--bluebg);color:var(--blue);display:grid;place-items:center}
+  .rep small{display:block;color:var(--dim2);font-size:11.5px}
+  .it{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line2);border-radius:8px;margin-bottom:6px;
+      font-family:ui-monospace,monospace;font-size:12px;color:var(--fg2);background:var(--panel);cursor:pointer}
+  .it:hover{border-color:var(--acc)}
+  .it .c{width:6px;height:6px;border-radius:50%;flex:none}
+  .c-ads{background:var(--ads)} .c-dws{background:var(--dws)} .c-dwd{background:var(--dwd)}
+  .mcard{border:1px solid var(--line2);border-left:2px solid var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:7px;background:var(--panel)}
+  .mcard b{font-size:12.5px} .mcard .f{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--warnfg);margin:3px 0}
+  .mcard small{color:var(--dim2);font-size:11px}
+  h5{font-size:11px;color:var(--dim2);letter-spacing:.06em;margin:13px 0 7px}
+  h5:first-child{margin-top:0}
+
+  /* ===== 第二屏：血缘中心 ===== */
+  #page-lineage{flex:1;display:flex;min-height:0}
+  .lcenter{flex:1;display:flex;flex-direction:column;min-width:0}
+  .lstream{flex:1;overflow:auto;padding:16px 18px}
+  .lside{width:300px;flex:none;border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px}
+  .toolbar{display:flex;align-items:center;gap:8px;margin-bottom:11px;font-size:12.5px;color:var(--dim)}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+  .seg button{border:0;background:transparent;padding:5px 11px;font:inherit;font-size:12.5px;color:var(--dim);cursor:pointer}
+  .seg button.on{background:var(--accbg);color:var(--acc);font-weight:600}
+  .toolbar input{border:1px solid var(--line);border-radius:8px;padding:5px 10px;font:inherit;font-size:12.5px;width:260px;background:var(--panel)}
+</style>
+<script>
+/* 主题初始化放在最前：先读偏好再渲染，避免闪白（§4.2）*/
+(function(){try{
+  var q=new URLSearchParams(location.search).get("theme");
+  var t=q||localStorage.getItem("dip-theme")||((window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light");
+  document.documentElement.setAttribute("data-theme",t);
+}catch(e){document.documentElement.setAttribute("data-theme","light");}})();
+</script>
+</head>
+<body>
+<header>
+  <span class="lg">◈</span><b>数据智能平台</b>
+  <span style="color:var(--dim2);font-size:12.5px">· 定稿原型</span>
+  <span class="sp">
+    <span class="tg w" title="未配置 LLM key 时的降级模式">规则模式</span>
+    <span class="tg">口径库 75</span>
+    <span class="tg" id="apibadge"><span class="dot"></span>连接中…</span>
+    <span class="tg" id="themebtn" title="切换浅色 / 深色主题" onclick="toggleTheme()">☾ 深色</span>
+    <span class="who"><i>张</i>张工 · 数据开发</span>
+  </span>
+</header>
+
+<div class="body">
+  <!-- 窄导航 -->
+  <div class="nav">
+    <div class="ni on" id="ni-chat" title="对话工作台" onclick="go('chat')">◧</div>
+    <div class="ni" id="ni-lineage" title="血缘中心" onclick="go('lineage')">◈</div>
+    <div class="ni" title="口径中心（P1 页面清单：/metrics）" onclick="alert('P1 另一页：口径库（列表 + 检索 + 详情）')">◆</div>
+    <div class="ni" title="报告中心（P1 页面清单：/reports）" onclick="alert('P1 另一页：报告列表 + iframe 预览')">▤</div>
+    <div class="ni sp" title="系统设置 · 审计" onclick="alert('P1 页面：系统设置 / 审计日志')">⚙</div>
+  </div>
+
+  <!-- 会话列（仅对话屏显示） -->
+  <div class="convs" id="convs">
+    <div class="hd">今天</div>
+    <div class="newb">＋ 新建对话</div>
+    <div class="cv on">ads_产销存月报的产量怎么来的？</div>
+    <div class="cv">改 output_qty 会砸哪些下游</div>
+    <div class="hd">本周</div>
+    <div class="cv">ods 到 ads 链路体检</div>
+    <div class="cv">口径库里有几个产销率口径</div>
+    <div class="ft">dev 身份 · 规则模式<br>内核 18080 <span class="dot"></span></div>
+  </div>
+
+  <!-- ================= 屏 1：对话工作台 ================= -->
+  <div class="body" id="page-chat" style="flex:1;min-height:0">
+    <div class="center">
+      <div class="ch"><span class="t">对话</span><span class="sp">本次回答的全部结论都带凭证 · 无凭证不发布</span></div>
+
+      <div class="stream" id="stream"></div>
+
+      <div class="comp">
+        <div class="inp">
+          <textarea placeholder="问点什么…（@ 引用表 · # 引用口径 · / 打开指令）"></textarea>
+          <div class="bar">
+            <span class="pl2">@ 表</span><span class="pl2"># 口径</span><span class="pl2">/ 指令</span>
+            <span class="r"><button class="send">发送</button></span>
+          </div>
+        </div>
+        <div class="hint">回答必须带可点开的凭证 · 未配 LLM key 时以规则模式运行，数据仍来自真实内核</div>
+      </div>
+    </div>
+
+    <!-- 右面板：证据画布 + 会话上下文（101 的右栏合并进来） -->
+    <div class="right">
+      <div class="rh">
+        <span class="tab" id="t-graph" onclick="pick('graph')">血缘图</span>
+        <span class="tab" id="t-metric" onclick="pick('metric')">口径</span>
+        <span class="tab" id="t-report" onclick="pick('report')">报告</span>
+        <span class="tab" id="t-ctx" onclick="pick('ctx')">上下文</span>
+        <span class="sp" id="srcLabel">证据 · 来源 /analyze（字段级血缘）</span>
+      </div>
+      <!-- 常驻引用条（一眼看到本次会话引用了什么） -->
+      <div class="refbar">
+        <span class="rc" onclick="pick('ctx')"><i style="background:var(--ads)"></i>ads.ads_产销存月报</span>
+        <span class="rc" onclick="pick('ctx')"><i style="background:var(--dws)"></i>cdw.dws_产销存汇总</span>
+        <span class="rc" onclick="pick('ctx')"><i style="background:var(--dwd)"></i>dim.dim_brand</span>
+        <span class="rc" onclick="pick('metric')">◆ 产量 v3</span>
+        <span class="rc" onclick="pick('report')">▤ 报告 1</span>
+        <span class="rc" onclick="pick('ctx')">内核 2 次 · 0.6s</span>
+      </div>
+
+      <div class="rp">
+        <!-- 血缘图 -->
+        <div class="card" id="p-graph"><h4>等待提问…</h4>
+        </div>
+        <div class="card hidden" id="p-metric"><h4>等待提问…</h4>
+        </div>
+        <div class="card hidden" id="p-report"><h4>等待提问…</h4>
+        </div>
+        <div class="card hidden" id="p-ctx"><h4>等待提问…</h4>
+        </div>
+        <div class="card">
+          <h4>全链路：ods → dwd → dws → ads <span class="sp">高亮＝产量 的依赖链（4 跳）</span></h4>
+          <div class="lvg" id="lvg2" style="height:330px"></div>
+          <div class="legend">
+            <span><i style="background:var(--ods)"></i>ods 采集</span><span><i style="background:var(--dwd)"></i>dwd 清洗</span>
+            <span><i style="background:var(--dws)"></i>dws 汇总</span><span><i style="background:var(--ads)"></i>ads 应用</span>
+            <span><i style="background:var(--warn)"></i>产量依赖链</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4>影响分析：改 <code>cdw.dws_产销存汇总.output_qty</code> 会砸谁 <span class="sp">/impact</span></h4>
+          <div class="meta" style="border:0;margin:0;padding:0">
+            下游 <b>2 张 ads 表</b> · <b>5 个字段</b> · <b>3 个任务</b> ——
+            <code>ads.ads_产销存月报.产量</code>、<code>ads.ads_经营指标明细.产量</code>、
+            <code>ads.ads_经营指标驾驶舱.产量口径</code> ⋯
+            <span class="pill" style="margin-left:8px" onclick="alert('原型：导出影响清单（CSV / 分享链接）')">导出清单</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="lside">
+      <h4 style="font-size:13px;margin-bottom:9px">表详情</h4>
+      <div class="mono" style="font-size:12.5px;margin-bottom:4px">ads.ads_产销存月报</div>
+      <div style="font-size:12px;color:var(--dim2);margin-bottom:10px">ads 层 · 6 字段 · 中文名覆盖 100%</div>
+      <div class="legend" style="margin:0 0 10px"><span><i style="background:var(--ads)"></i>产出：ads/ads_产销存月报.sql</span></div>
+      <h5>字段（含中文名）</h5>
+      <div class="it">产量 <span style="margin-left:auto;color:var(--dim2)">SUM(output_qty)</span></div>
+      <div class="it">销量 <span style="margin-left:auto;color:var(--dim2)">SUM(sale_qty)</span></div>
+      <div class="it">库存 <span style="margin-left:auto;color:var(--dim2)">SUM(stock_qty)</span></div>
+      <div class="it">产销率 <span style="margin-left:auto;color:var(--dim2)">ROUND(销量/产量,4)</span></div>
+      <div class="it">品牌 / 工厂 <span style="margin-left:auto;color:var(--dim2)">维表 join</span></div>
+      <h5>相关口径 · 2</h5>
+      <div class="mcard"><b>产量</b><div class="f">= 打码量 + 跳码量 − 重码量</div><small>v3 · verified</small></div>
+      <div class="mcard"><b>产销率</b><div class="f">= 销量 ÷ 产量</div><small>v2 · verified</small></div>
+      <h5>相关凭证</h5>
+      <div class="it" onclick="alert('原型：打开该表最新报告')">▤ 最新报告 rpt_...a1b2c3d4</div>
+      <div class="it" onclick="go('chat')">◧ 回到对话追问</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========== 主题（§4.2：只换令牌）========== */
+function syncThemeBtn(){var t=document.documentElement.getAttribute('data-theme');
+  var b=document.getElementById('themebtn'); if(b) b.textContent=(t==='dark'?'☀ 浅色':'☾ 深色');}
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('dip-theme',t)}catch(e){};syncThemeBtn();}
+function toggleTheme(){setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');}
+
+/* ========== 页面切换 ========== */
+function go(p){
+  document.getElementById('page-chat').classList.toggle('hidden', p!=='chat');
+  document.getElementById('page-lineage').classList.toggle('hidden', p!=='lineage');
+  document.getElementById('convs').classList.toggle('hidden', p!=='chat');
+  document.getElementById('ni-chat').classList.toggle('on', p==='chat');
+  document.getElementById('ni-lineage').classList.toggle('on', p==='lineage');
+  if(p==='lineage') draw('lvg2', NODES2, LINKS2, CHAIN2, 330);   /* 注意：血缘中心用 CHAIN2（节点 id 体系不同）*/
+}
+
+/* ========== 证据面板切换 ========== */
+function pick(k){
+  ['graph','metric','report','ctx'].forEach(function(x){
+    document.getElementById('p-'+x).classList.toggle('hidden', x!==k);
+    document.getElementById('t-'+x).classList.toggle('on', x===k);
+    var e=document.getElementById('ev-'+x); if(e) e.classList.toggle('on', x===k);
+  });
+  document.getElementById('srcLabel').textContent = '证据 · 来源 ' + ({
+    graph:'/analyze（字段级血缘）', metric:'/kb/search（口径 v3 · verified）',
+    report:'/report（自包含 HTML）', ctx:'本次会话的引用与调用记录'
+  })[k];
+  if(k==='graph') draw('lvg', NODES, LINKS, CHAIN, 300);
+}
+
+/* ========== 极简血缘图（原型手算坐标；生产用 AntV G6）==========
+   约定：列序按数仓流向 ods→dwd→dws→ads，连线一律左→右；
+   节点固定高度 34，端点 = 源右边缘中点 → 目标左边缘中点。 */
+var COLS = ['ODS 采集','DWD 清洗','DWS 汇总','ADS 应用'];
+var NODES = [   /* 对话右侧：产量依赖链 */
+  {id:'ods1', x:0, y:1, t:'ods_卷烟产量明细', lb:'ods · 源表', f:'ods.ods_卷烟产量明细'},
+  {id:'dwd1', x:1, y:1, t:'dwd_卷烟产量明细', lb:'dwd · 清洗', f:'cdw.dwd_卷烟产量明细'},
+  {id:'dws',  x:2, y:1, t:'dws_产销存汇总',   lb:'dws · 汇总', f:'cdw.dws_产销存汇总'},
+  {id:'ads',  x:3, y:1, t:'ads_产销存月报',   lb:'ads · 产出 · 本句', f:'ads.ads_产销存月报'},
+];
+var LINKS = [['ods1','dwd1'],['dwd1','dws'],['dws','ads']];
+var CHAIN = {ods1:1, dwd1:1, dws:1, ads:1};
+
+var NODES2 = [  /* 血缘中心：更完整的链路（含销量链与维表），保持零交叉 */
+  {id:'o1', x:0, y:0, t:'ods_卷烟销量明细', lb:'ods · 源表', f:'ods.ods_卷烟销量明细'},
+  {id:'o2', x:0, y:1, t:'ods_卷烟产量明细', lb:'ods · 源表', f:'ods.ods_卷烟产量明细'},
+  {id:'o3', x:0, y:2, t:'ods_成品库存明细', lb:'ods · 源表', f:'ods.ods_成品库存明细'},
+  {id:'d1', x:1, y:0, t:'dwd_卷烟销量明细', lb:'dwd · 清洗', f:'cdw.dwd_卷烟销量明细'},
+  {id:'d2', x:1, y:1, t:'dwd_卷烟产量明细', lb:'dwd · 清洗', f:'cdw.dwd_卷烟产量明细'},
+  {id:'d3', x:1, y:2, t:'dwd_成品库存明细', lb:'dwd · 清洗', f:'cdw.dwd_成品库存明细'},
+  {id:'w1', x:2, y:1, t:'dws_产销存汇总',   lb:'dws · 汇总', f:'cdw.dws_产销存汇总'},
+  {id:'dim1', x:2, y:3, t:'dim_brand',      lb:'dim · 维表', f:'dim.dim_brand'},
+  {id:'dim2', x:2, y:4, t:'dim_plant',      lb:'dim · 维表', f:'dim.dim_plant'},
+  {id:'a1', x:3, y:1, t:'ads_产销存月报',   lb:'ads · 产出', f:'ads.ads_产销存月报'},
+];
+var LINKS2 = [['o1','d1'],['o2','d2'],['o3','d3'],['d1','w1'],['d2','w1'],['d3','w1'],
+              ['w1','a1'],['dim1','a1'],['dim2','a1']];
+var CHAIN2 = {o2:1, d2:1, w1:1, a1:1};   /* 产量 的依赖链 */
+
+function draw(boxId, NODES, LINKS, CHAIN, H){
+  var box = document.getElementById(boxId);
+  if(!box) return;
+  box.innerHTML = '';
+  box.style.height = H + 'px';
+  /* 列宽取容器 1/4，节点在列内**居中**、宽度自适应 —— 保证最后一列不会被顶出容器 */
+  var W = box.clientWidth || 620, colW = W/4, ndW = Math.min(colW - 20, 180);
+  var pad = (colW - ndW) / 2;
+  var rowH = 54, top0 = 30;
+  /* 列标题（与节点左对齐） */
+  COLS.forEach(function(c,i){
+    var h = document.createElement('div');
+    h.className='colh'; h.textContent=c; h.style.left=(i*colW + pad)+'px';
+    box.appendChild(h);
+  });
+  var pos = {};
+  NODES.forEach(function(n){
+    var d = document.createElement('div');
+    d.className = 'nd' + (CHAIN[n.id] ? ' hl' : '');
+    d.style.left = (n.x*colW + pad) + 'px';
+    d.style.top  = (top0 + n.y*rowH) + 'px';
+    d.style.width = ndW + 'px';
+    d.innerHTML = n.t + '<span class="lb">' + n.lb + '</span>';
+    d.title = n.f + '（点击查看详情）';
+    d.onclick = function(){ d.classList.toggle('sel'); };
+    box.appendChild(d);
+    pos[n.id] = { x:n.x*colW + pad, y:top0 + n.y*rowH, w:ndW, h:34 };
+  });
+  LINKS.forEach(function(l){
+    var a = pos[l[0]], b = pos[l[1]];
+    if(!a || !b) return;
+    var x1 = a.x + a.w, y1 = a.y + a.h/2, x2 = b.x, y2 = b.y + b.h/2;
+    if(x2 <= x1) return;                       /* 只画左→右 */
+    var len = Math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
+    var e = document.createElement('div');
+    e.className = 'ln' + ((CHAIN[l[0]] && CHAIN[l[1]]) ? ' hl' : '');
+    e.style.left = x1 + 'px'; e.style.top = y1 + 'px'; e.style.width = len + 'px';
+    e.style.transform = 'rotate(' + Math.atan2(y2-y1, x2-x1) + 'rad)';
+    box.appendChild(e);
+  });
+}
+window.addEventListener('resize', function(){
+  if(!document.getElementById('page-chat').classList.contains('hidden')) pick('graph');
+  if(!document.getElementById('page-lineage').classList.contains('hidden')) draw('lvg2', NODES2, LINKS2, CHAIN2, 330);
+});
+syncThemeBtn();
+pick('graph');   /* 必须在 NODES/LINKS 赋值之后调用 */
+/* 深链接（便于无头渲染验证与分享具体屏）：?page=lineage / ?pick=metric|report|ctx / ?open=1 展开工具步骤 */
+(function(){
+  var q = new URLSearchParams(location.search);
+  if (q.get('page') === 'lineage') go('lineage');
+  var pk = q.get('pick'); if (pk) pick(pk);
+  if (q.get('open') === '1'){ var st=document.querySelector('.steps'); if(st) st.classList.add('open'); }
+})();
+</script>
+
+<script>
+/* ================= B4 静态迭代版：接真接口 ================= */
+const API = (location.origin.startsWith('http') ? location.origin : 'http://127.0.0.1:18100');
+let SESSION = 'demo-' + Math.random().toString(36).slice(2, 8);
+const STATUS_CN = {verified:'已核实', inferred:'推导', candidate:'候选', unresolved:'证据不足', stale:'快照过期'};
+const STATUS_CLS = {verified:'ok', inferred:'', candidate:'', unresolved:'w', stale:'w'};
+const $ = (s, r=document) => r.querySelector(s);
+
+function el(tag, cls, text) { const d=document.createElement(tag); if(cls) d.className=cls; if(text!==undefined) d.textContent=text; return d; }
+
+function statusBadges(r) {
+  const box = el('div','bs');
+  const st = el('span','b ' + (STATUS_CLS[r.status]||'g'), STATUS_CN[r.status]||r.status);
+  box.append(st,
+    el('span','b g', '置信度 ' + r.confidence),
+    el('span','b g', r.version || '版本未知'));
+  if (r.source && r.source.file) box.append(el('span','b g', '来源 ' + r.source.file + (r.source.line ? ' 第' + r.source.line + '行' : '（行级待补）')));
+  return box;
+}
+
+function renderSteps(calls) {
+  const box = el('div','steps'); box.onclick = () => box.classList.toggle('open');
+  calls.forEach((c, i) => {
+    const row = el('div','step'); if (i) row.style.marginTop='6px';
+    row.append(el('span','d', c.ok ? '✓' : '✗'), el('span','', `${c.name} · ${c.endpoint || ''}`), el('span','tt', c.ms + 'ms'));
+    box.append(row);
+    if (c.error || !c.ok) box.append(Object.assign(el('div','sd'), {textContent: '失败：' + (c.error||'未知')}));
+  });
+  return box;
+}
+
+function renderAnswer(a, question) {
+  const stream = $('#stream');
+  // 用户消息
+  const q = el('div','msg');
+  q.append(Object.assign(el('div','who2'), {innerHTML:'<span class="av">我</span> 我'}),
+           Object.assign(el('div','me'), {textContent: question}));
+  stream.append(q);
+
+  // 助手消息
+  const msg = el('div','msg');
+  msg.append(Object.assign(el('div','who2'), {innerHTML:'<span class="av ai">◈</span> 数据智能平台'}));
+  if (a.tool_calls && a.tool_calls.length) msg.append(renderSteps(a.tool_calls));
+
+  const concl = el('div','concl');
+  concl.append(Object.assign(el('div','f'), {textContent: a.result.value ? a.result.value.display : '（未形成结论）'}));
+  concl.append(statusBadges(a.result));
+  msg.append(concl);
+  msg.append(Object.assign(el('div','', ), {style:'color:var(--dim);font-size:13.5px;margin:.5em 0 11px', textContent: a.text}));
+
+  const evs = el('div','evlist');
+  (a.result.evidence || []).forEach((e, i) => {
+    const row = el('div','ev' + (i===0 ? ' on' : ''));
+    row.append(el('b', '', '〔' + e.type + '〕' + e.ref), el('span','k', e.summary));
+    row.onclick = () => { document.querySelectorAll('.ev').forEach(x=>x.classList.remove('on')); row.classList.add('on'); };
+    evs.append(row);
+  });
+  if (!a.result.evidence.length) msg.append(el('div','meta','没有凭证 → 按铁律 1 不给结论'));
+  else msg.append(evs);
+
+  if (a.suggestions && a.suggestions.length) {
+    const pills = el('div'); pills.style.cssText = 'display:flex;gap:7px;flex-wrap:wrap;margin-top:12px';
+    a.suggestions.forEach(s => { const p = el('span','pill', s); p.onclick = () => ask(s); pills.append(p); });
+    msg.append(pills);
+  }
+  stream.append(msg);
+  stream.scrollTop = stream.scrollHeight;
+  setTimeout(() => { concl.onclick = () => pick(a.result.value && a.result.value.type==='formula' ? 'metric' : 'graph'); }, 0);
+}
+
+async function checkHealth() {
+  const badge = $('#apibadge');
+  try {
+    const r = await fetch(API + '/api/health'); const j = await r.json();
+    const ok = j.kernel && j.kernel.ok;
+    badge.className = 'tg ' + (ok ? 'ok' : 'w');
+    badge.innerHTML = '<span class="dot"></span>' + (ok ? '内核正常 ' + j.kernel.ms + 'ms' : '内核不可达');
+    badge.title = '模式 ' + j.mode + '（' + (j.mode === 'rule' ? '无 LLM key 也能跑' : 'LLM') + '）· 内核 ' + j.kernel.base_url;
+  } catch (e) {
+    badge.className = 'tg w'; badge.innerHTML = '<span class="dot"></span>API 离线';
+    badge.title = String(e);
+  }
+}
+
+async function ask(text) {
+  if (!text || !text.trim()) return;
+  const stream = $('#stream');
+  const ph = el('div','msg'); ph.append(Object.assign(el('div','who2'), {innerHTML:'<span class="av ai">◈</span> 数据智能平台'}));
+  ph.append(Object.assign(el('div','steps'), {textContent:'思考中…（调内核）'}));
+  stream.append(ph); stream.scrollTop = stream.scrollHeight;
+  try {
+    const r = await fetch(API + '/api/agent/ask', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text: text, session_id: SESSION, mode:'rule'})});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const a = await r.json();
+    ph.remove(); renderAnswer(a, text);
+  } catch (e) {
+    ph.remove();
+    const m = el('div','msg');
+    m.append(Object.assign(el('div','who2'), {innerHTML:'<span class="av ai">◈</span> 数据智能平台'}));
+    m.append(Object.assign(el('div','concl'), {innerHTML:'<div class="f">接口不可用：' + String(e) + '</div>'}));
+    m.append(el('div','meta','前端不会回退成编造数据 —— 请先起 portal-api（bash ops/dev.sh）'));
+    stream.append(m);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const ta = $('.inp textarea'), btn = $('.send');
+  if (btn) btn.onclick = () => { ask(ta.value); ta.value = ''; };
+  if (ta) ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(ta.value); ta.value=''; } });
+  checkHealth();
+  ask('ads.ads_产销存月报 的产量怎么来的？');   // 进页面就跑一次真实问答，便于演示与截图
+});
+</script>
+
+</body>
+</html>

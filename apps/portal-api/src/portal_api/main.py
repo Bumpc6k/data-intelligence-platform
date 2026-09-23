@@ -5,9 +5,12 @@ B2 会在这里挂上真正的编排（dip_agent），B5 补身份/会话/审计
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from dip_core import load_settings
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from lineage_client import LineageClient
 
 from .routers import agent, health, reports
@@ -17,7 +20,7 @@ settings = load_settings()
 app = FastAPI(title="数据智能平台 · portal-api", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5190"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -41,3 +44,8 @@ def api_health() -> dict:
 
 def _not_implemented(what: str, work_item: str) -> HTTPException:
     return HTTPException(status_code=501, detail=f"{what} 尚未实现（工作项 {work_item}，见 docs/ 设计与 ADR）")
+
+# B4 静态迭代版前端（零构建）由后端直接托管：http://127.0.0.1:18100/app/
+_WEB_DIR = Path(__file__).resolve().parents[3] / "portal-web"
+if _WEB_DIR.is_dir():
+    app.mount("/app", StaticFiles(directory=str(_WEB_DIR), html=True), name="web")
