@@ -574,6 +574,145 @@ const STATIC_DEMO = {
   ],
   "mode": "rule"
 };
+
+/* ================= 右侧证据面板：接真实返回 ================= */
+function panelCard(id, title, html) {
+  const card = document.getElementById(id);
+  if (!card) return;
+  card.innerHTML = '';
+  const h = el('h4'); h.append(document.createTextNode(title));
+  card.append(h);
+  const box = el('div'); box.innerHTML = html || '';
+  card.append(box);
+}
+
+function tableOf(result) {
+  const ev = (result.evidence || []).find(e => (e.ref || '').startsWith('graph:'));
+  return ev ? ev.ref.replace('graph:', '').replace('#downstream', '') : null;
+}
+
+function renderMetric(result, text) {
+  const v = result.value;
+  if (!v) {
+    panelCard('p-metric', '口径 · 本次未命中',
+      '<div class="meta">' + (result.status === 'unresolved'
+        ? '没有足够证据定位口径（平台不会猜）。补上「表名」或「表.字段」再问一次。'
+        : '本次回答没有涉及口径。') + '</div>');
+    return;
+  }
+  const ev = (result.evidence || []).find(e => e.type === 'metric') || {};
+  const sr = result.source || {};
+  const rows = [
+    ['人话公式', v.display],
+    ['忠实表达式', v.expr || '—'],
+    ['口径来源表', (ev.summary || '').split('口径在 ').pop() || '—'],
+    ['来源脚本', sr.file || '—'],
+    ['版本', result.version || '—'],
+    ['置信度', String(result.confidence)],
+    ['状态', result.status],
+  ];
+  panelCard('p-metric', '口径详情',
+    '<div class="fml">' + v.display + '</div>' +
+    (v.expr ? '<div class="fml2">' + v.expr + '</div>' : '') +
+    '<dl class="kv">' + rows.map(([k, val]) => '<dt>' + k + '</dt><dd>' + val + '</dd>').join('') + '</dl>' +
+    '<div class="meta">证据端点：' + (ev.endpoint || '—') + '｜行号待内核补（ADR-0003）</div>');
+}
+
+async function renderGraph(result) {
+  const t = tableOf(result);
+  if (!t) {
+    panelCard('p-graph', '血缘图 · 本次未涉及', '<div class="meta">这次回答没有血缘证据。</div>');
+    return;
+  }
+  panelCard('p-graph', '血缘：' + t, '<div class="meta">加载真实血缘图…</div>');
+  try {
+    const r = await fetch(API + '/api/lineage/upstream?table=' + encodeURIComponent(t) + '&depth=5');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const g = await r.json();
+    drawRealGraph(t, g);
+  } catch (e) {
+    panelCard('p-graph', '血缘：' + t, '<div class="meta">血缘图加载失败：' + String(e) + '。可直接看凭证里的「上游 N 张」。</div>');
+  }
+}
+
+const LAYERS = ['ods', 'dwd', 'dws', 'ads', 'dim', 'other'];
+
+function drawRealGraph(title, g) {
+  const card = document.getElementById('p-graph');
+  card.innerHTML = '';
+  const h = el('h4'); h.append(document.createTextNode('血缘：' + title));
+  h.append(Object.assign(el('span','sp'), {textContent: '上游 ' + g.upstream_count + ' 张 / ' + g.edge_count + ' 条边 · 节点来自 ' + g.endpoint}));
+  card.append(h);
+
+  const box = el('div','lvg'); box.style.height = Math.max(260, 46 * Math.max(1, ...LAYERS.map(L => g.nodes.filter(n => n.layer === L).length))) + 'px';
+  card.append(box);
+  const w = el('div','panwrap'); box.append(w);
+  const hint = el('div','panhint','拖动平移 · 滚轮缩放 · 双击复位'); box.append(hint);
+
+  const cols = LAYERS.filter(L => g.nodes.some(n => n.layer === L));
+  const boxW = card.clientWidth || 620, colW = boxW / Math.max(cols.length, 1), ndW = Math.min(colW - 16, 190);
+  const rowsMax = Math.max(...cols.map(L => g.nodes.filter(n => n.layer === L).length), 1);
+  const rowH = Math.min(46, (box.clientHeight - 30) / rowsMax);
+  const pos = {};
+  cols.forEach((L, ci) => {
+    const ch = el('div','colh', L + ' 层'); ch.style.left = (ci * colW + 8) + 'px'; w.append(ch);
+    g.nodes.filter(n => n.layer === L).forEach((n, ri) => {
+      const d = el('div','nd' + (n.name === title ? ' hl' : ''));
+      d.style.left = (ci * colW + 8) + 'px'; d.style.top = (26 + ri * rowH) + 'px'; d.style.width = ndW + 'px';
+      d.textContent = n.name.split('.').pop();
+      d.title = n.name;
+      if (n.name === title) d.style.borderColor = 'var(--acc)';
+      w.append(d);
+      pos[n.name] = { x: ci * colW + 8, y: 26 + ri * rowH, w: ndW, h: 34 };
+    });
+  });
+  g.edges.forEach(([a, b]) => {
+    const pa = pos[a], pb = pos[b];
+    if (!pa || !pb || pb.x <= pa.x) return;
+    const x1 = pa.x + pa.w, y1 = pa.y + pa.h / 2, x2 = pb.x, y2 = pb.y + pb.h / 2;
+    const ln = el('div','ln');
+    ln.style.left = x1 + 'px'; ln.style.top = y1 + 'px';
+    ln.style.width = Math.hypot(x2 - x1, y2 - y1) + 'px';
+    ln.style.transform = 'rotate(' + Math.atan2(y2 - y1, x2 - x1) + 'rad)';
+    w.append(ln);
+  });
+  if (window.__ensurePan) window.__ensurePan(box);
+  const st = { x: 0, y: 0, k: 1 };
+  w.dataset.t = JSON.stringify(st);
+  box.classList.add('has-pan');
+}
+
+function renderReport(result) {
+  const ev = (result.evidence || []).find(e => e.type === 'report');
+  if (!ev) { panelCard('p-report', 'HTML 报告 · 本次没有', '<div class="meta">只有脚本分析（贴 SQL 提问）才会生成报告。</div>'); return; }
+  const rid = (ev.ref || '').split(':').pop();
+  panelCard('p-report', 'HTML 报告',
+    '<div class="rep" onclick="window.open(API + \'/api/reports/' + rid + '\', \'_blank\')">' +
+    '<span class="ic">▤</span><span><b>' + rid + '</b><small>' + ev.summary + ' · 由平台代理，不暴露内核地址</small></span>' +
+    '<span style="margin-left:auto;color:var(--dim2)">打开 ›</span></div>');
+}
+
+function renderContext(a, question) {
+  const rows = [];
+  (a.result.evidence || []).forEach(e => rows.push('凭证 · ' + e.type + ' · ' + e.ref));
+  (a.tool_calls || []).forEach(c => rows.push('调用 · ' + c.name + ' → ' + (c.endpoint || '') + ' · ' + c.ms + 'ms · ' + (c.ok ? '成功' : '失败')));
+  panelCard('p-ctx', '会话上下文',
+    '<h5>本次提问</h5><div class="it">' + question + '</div>' +
+    '<h5>引用与调用 · ' + rows.length + ' 条</h5>' +
+    rows.map(r => '<div class="it">' + r + '</div>').join('') +
+    '<div class="meta">mode=' + a.mode + ' · 会话（P1 内存，W-112 落库）· 审计落库见 W-117</div>');
+}
+
+function renderPanel(a, question) {
+  const v = a.result.value;
+  renderMetric(a.result, a.text);
+  renderGraph(a.result);
+  renderReport(a.result);
+  renderContext(a, question);
+  const which = v && v.type === 'formula' ? 'metric' : (tableOf(a.result) ? 'graph' : 'ctx');
+  if (typeof pick === 'function') pick(which);
+}
+
 const FORCE_STATIC = new URLSearchParams(location.search).has('static') || location.protocol === 'file:';
 let STATIC_MODE = FORCE_STATIC;
 
@@ -620,7 +759,12 @@ function renderAnswer(a, question) {
   if (a.tool_calls && a.tool_calls.length) msg.append(renderSteps(a.tool_calls));
 
   const concl = el('div','concl');
-  concl.append(Object.assign(el('div','f'), {textContent: a.result.value ? a.result.value.display : '（未形成结论）'}));
+  if (a.result.value) {
+    concl.append(Object.assign(el('div','f'), {textContent: a.result.value.display}));
+  } else {
+    concl.append(Object.assign(el('div','f'), {style:'font-size:13.5px;font-family:inherit',
+      textContent: a.result.status === 'unresolved' ? '需要澄清 / 证据不足 —— 平台不会猜' : '本次没有形成结论'}));
+  }
   concl.append(statusBadges(a.result));
   msg.append(concl);
   msg.append(Object.assign(el('div','', ), {style:'color:var(--dim);font-size:13.5px;margin:.5em 0 11px', textContent: a.text}));
@@ -643,6 +787,7 @@ function renderAnswer(a, question) {
   stream.append(msg);
   stream.scrollTop = stream.scrollHeight;
   setTimeout(() => { concl.onclick = () => pick(a.result.value && a.result.value.type==='formula' ? 'metric' : 'graph'); }, 0);
+  renderPanel(a, question);
 }
 
 function setStaticBadge(reason) {

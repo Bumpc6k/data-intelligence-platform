@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from lineage_client import LineageClient
 
-from .routers import agent, health, reports
+from .routers import agent, health, lineage, reports
 
 settings = load_settings()
 
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(agent.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
+app.include_router(lineage.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])
