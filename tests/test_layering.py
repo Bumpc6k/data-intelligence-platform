@@ -27,8 +27,8 @@ PKG_DIRS = {
 ALLOWED: dict[str, set[str]] = {
     "dip_contracts": set(),
     "dip_core": set(),
-    "lineage_client": set(),
-    "dip_agent": {"dip_contracts", "dip_core"},
+    "lineage_client": {"dip_contracts"},          # 适配器实现契约层的 KernelToolkit 协议
+    "dip_agent": {"dip_contracts", "dip_core"},   # 只依赖协议，不依赖 httpx 适配器
     "portal_api": {"dip_contracts", "dip_core", "dip_agent", "lineage_client"},
 }
 

@@ -23,10 +23,10 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+from dip_contracts import ToolResult
 
 from .errors import KernelAPIError, KernelHTTPError
 
@@ -47,25 +47,6 @@ TIMEOUTS: dict[str, float] = {
     "/health": 5.0,
     "/reports": 10.0,
 }
-
-
-@dataclass(frozen=True)
-class ToolResult:
-    """一次内核调用的结果（**失败也是结果**，不抛异常）。
-
-    `data` 保持内核原始字典不做改写，便于任何时候回查"内核当时到底返回了什么"。
-    """
-
-    ok: bool
-    endpoint: str
-    ms: int
-    data: dict[str, Any] = field(default_factory=dict)
-    error: str | None = None
-    http_status: int | None = None
-    attempts: int = 1
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self.data.get(key, default)
 
 
 class LineageClient:
@@ -90,6 +71,9 @@ class LineageClient:
             headers={"Content-Type": "application/json", **(headers or {})},
             transport=transport,
             timeout=self.default_timeout,
+            # 内核是本机/内网服务：不要被 http_proxy / ALL_PROXY 影响
+            # （系统里的 SOCKS 代理会让 httpx 抛 socksio 缺失，而不是干净地连不上）
+            trust_env=False,
         )
 
     # ---------- 底层 ----------
