@@ -716,7 +716,7 @@ function renderPanel(a, question) {
 
 
 /* ================= B3：会话列表 / 审计流水 / 留痕号 ================= */
-let CURRENT_SESSION = SESSION;
+let CURRENT_SESSION = null;  // 延迟到首次使用时取 SESSION（避免 TDZ）
 
 function fmtTime(iso) {
   try { return new Date(iso).toLocaleString('zh-CN', {hour12:false}).slice(5); } catch (e) { return iso; }
@@ -724,6 +724,7 @@ function fmtTime(iso) {
 
 /* 左侧会话列表：读 /api/sessions（刷新后历史真的在；DB 不可用时退回提示） */
 async function loadSessions() {
+  if (!CURRENT_SESSION) CURRENT_SESSION = SESSION;
   const box = document.getElementById('convs');
   if (!box) return;
   const list = box.querySelectorAll('.cv');
@@ -755,6 +756,7 @@ async function loadSessions() {
 
 /* 右侧「上下文」面板：本条回答的引用 + 本会话审计流水 */
 async function loadAudit() {
+  if (!CURRENT_SESSION) CURRENT_SESSION = SESSION;
   const card = document.getElementById('p-ctx');
   if (!card) return;
   card.innerHTML = '';
