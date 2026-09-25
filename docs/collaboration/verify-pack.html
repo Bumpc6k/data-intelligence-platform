@@ -13,7 +13,7 @@
 <table>
 <tr><th>规则</th><th>说明</th></tr>
 <tr><td><b>独立可完成</b></td><td>四个任务互不依赖，不需要等别人；<b>不要顺手改别人的范围</b></td></tr>
-<tr><td><b>冻结资产只调用、不修改</b></td><td>内核仓库、<code>integrations/lineage-client</code>、<code>packages/dip-contracts</code>、审计与知识库<b>只读复用</b>（见附录）</td></tr>
+<tr><td><b>冻结资产只调用、不修改</b></td><td>内核仓库、<code>integrations/lineage-client</code>、<code>packages/dip-contracts</code>、审计库<b>按现有接口复用</b>（见附录）。注意：<b>内核本身不是只读的</b>——它含 <code>/generate/*</code> 生成类端点，<code>/analyze</code> 还会落盘 HTML 报告；&quot;只读&quot;只是我们客户端的调用约束，任何基于&quot;内核只读&quot;的假设都要复核（验证报告 P2-9）</td></tr>
 <tr><td><b>一个任务一个 PR</b></td><td>分支 <code>feat/tN-简述</code>；PR 必须写清&quot;<b>怎么验证</b>&quot;（命令 + 期望输出）</td></tr>
 <tr><td><b>门禁必须绿</b></td><td><code>bash ops/gate.sh</code> → <code>GATE: ALL_PASS</code>（含 ruff + pytest + 分层守卫）；<b>红了不许提 PR</b></td></tr>
 <tr><td><b>不许提交密钥</b></td><td>DeepSeek Key 等放 <code>.env</code>（已在 .gitignore）；仓库里只留 <code>.env.example</code></td></tr>
@@ -35,7 +35,7 @@
 <table>
 <tr><th>项</th><th>内容</th></tr>
 <tr><td><b>验证什么</b></td><td>&quot;万物皆插件&quot;能不能落地：我们的能力包成 <b>MCP skill</b> 后，能否被 dsh 这类外壳无差别调用</td></tr>
-<tr><td><b>交付物</b></td><td>① 一个 MCP skill 服务，包装<b>现成的血缘解析</b>（内核 <code>POST /analyze</code>，只读）② 该 skill 的<b>契约声明</b>（按《架构讨论》§3 字段：name/when/input/output/side_effect/evidence_kind/renderer/timeout/idempotent/budget）③ <code>docs/notes/mcp-skill.md</code>：怎么注册、怎么被调用、返回长什么样</td></tr>
+<tr><td><b>交付物</b></td><td>① 一个 MCP skill 服务，包装<b>现成的血缘解析</b>（内核 <code>POST /analyze</code>，只读）② 该 skill 的<b>契约声明</b>（按《架构讨论》§3 的 <b>9 类字段</b>：name+version / when / input_schema+output_schema / side_effect / <b>auth_scope</b> / idempotent+timeout+<b>retry</b> / evidence_kind / renderer / budget）③ <code>docs/notes/mcp-skill.md</code>：怎么注册、怎么被调用、返回长什么样</td></tr>
 <tr><td><b>边界</b></td><td>只包装 1 个 skill，<b>不要</b>批量包装；<b>不要</b>碰写操作类能力（建表/调度那些留给后续）</td></tr>
 <tr><td><b>验收标准</b></td><td>给一句「ads.ads_产销存月报 的产量怎么来的？」能返回结构化结果 <b>+ 回执</b>（来源端点、耗时、证据条数）；<code>bash ops/gate.sh</code> 绿；有测试用例（可用已录制的真实响应做假内核）</td></tr>
 <tr><td><b>提示</b></td><td>已录制的真实内核响应 fixture：<code>integrations/lineage-client/tests/fixtures/kernel-probe-2026-09-23.json</code>；内核服务起法见 §3</td></tr>
@@ -63,7 +63,10 @@
 <pre>
 # 现有可复用服务（都在本机，幂等脚本）
 bash ops/start-pg.sh                      # 审计库 PostgreSQL :15432（会话/审计已能用）
-bash /usr/local/bin/start-lineage-api.sh  # 数据智能内核 :18080（血缘/口径/报告，只读）
+bash /usr/local/bin/start-lineage-api.sh  # 数据智能内核 :18080（脚本位置：内核仓库 ops/start-lineage-api.sh）
+#   首次使用要先构建演示数据（否则口径为空）：
+#   cd &lt;内核仓库&gt; &amp;&amp; PYTHONPATH=.:apps/lineage-api:packages/lineage-core python -m lineage.cli kb build examples/warehouse examples/knowledge_demo --db data/knowledge.db
+#   Windows 下脚本是 .venv/Scripts/，且内核启动脚本需自行补 PYTHONPATH（验证报告 P1-4/P1-5b）
 bash ops/start-portal.sh                  # 平台后端 + 前端 :18100（http://127.0.0.1:18100/app/）
 
 # 开发
@@ -99,6 +102,9 @@ LINEAGE_BASE_URL=http://127.0.0.1:18080
 <tr><td>T4 防火墙最小版</td><td></td><td></td><td></td><td></td></tr>
 </table>
 <p><b>回报纪律</b>：说&quot;完成了&quot;必须带证据；没完成就说卡在哪（我们宁要诚实的中途报告，不要漂亮的假完成）。</p>
+<p><b>中文 Windows 的坑（务必记住）</b>：做 HTTP 验证时<b>必须显式 UTF-8</b>——</p>
+<p><code>Content-Type: application/json; charset=utf-8</code> + 请求体用 UTF-8 字节。</p>
+<p>否则 PowerShell 会按 GBK 发送，中文问题变成乱码，<b>会被误判成产品缺陷</b>（验证报告 §8 就踩过这个坑）。</p>
 <p>---</p>
 <h2>6. 附录：当前可复用资产（<b>只调用，不修改</b>）</h2>
 <table>
@@ -115,4 +121,17 @@ LINEAGE_BASE_URL=http://127.0.0.1:18080
 <p>---</p>
 <h2>7. 明确不在本轮范围（避免范围爆炸）</h2>
 <p>用户与权限管理、审批流转引擎、调度平台写操作、DataWorks/Airflow 适配、知识库写入通道与审核流、性能优化、多环境与多租户。</p>
-<p>—— 这些等验证结果回来、写完《v2 项目规划 v1》再排期。</p></body></html>
+<p>—— 这些等验证结果回来、写完《v2 项目规划 v1》再排期。</p>
+<p>---</p>
+<h2>8. 验证反馈处置（2026-09-25 首轮验证报告）</h2>
+<p>协作者在全新 Windows 机器上从零验证后提交了《重新验证报告》，据此修复如下（<b>已并入本仓库</b>）：</p>
+<table>
+<tr><th>编号</th><th>缺陷</th><th>处置</th></tr>
+<tr><td>P0-1</td><td><code>pyproject.toml</code> 缺 <code>[build-system]</code>，<code>pip install -e &quot;.[api,dev]&quot;</code> 必败（make venv / CI 全挂）</td><td>补 <code>[build-system]</code> + <code>[tool.setuptools] packages=[]</code></td></tr>
+<tr><td>P0-2</td><td><code>psycopg</code> 被顶层 import 但未声明</td><td>加入 <code>api</code> extra</td></tr>
+<tr><td>P0-3</td><td>建表在 <b>import 期</b>执行，PG 不可达时 libpq 无限等待 → pytest/门禁<b>静默挂死</b></td><td>移到 FastAPI <b>lifespan</b>；默认 DSN 强制带 <code>connect_timeout</code>（双保险）</td></tr>
+<tr><td>P1-4</td><td><code>ops/gate.sh</code> 硬编码 <code>.venv/bin/</code>，Windows 必失败</td><td>自动探测 <code>.venv/Scripts</code> 与 <code>.venv/bin</code></td></tr>
+<tr><td>P1-6</td><td>冒烟测试的 demo SQL 默认指向作者家目录</td><td>改为环境变量（缺失则跳过并给指引），支持自动探测</td></tr>
+<tr><td>P2-8~13</td><td>路径描述 / 内核不只读 / 契约字段漏项 / fixture 大小 / 文档落点</td><td>本文件已逐条更正；<code>docs/notes/</code> 未建，T1 的说明请落在 <code>docs/collaboration/notes/</code></td></tr>
+</table>
+<p><b>教训（已写进协作规范）</b>：中文 Windows 下做 HTTP 验证必须显式 UTF-8，否则编码问题会被误判为产品缺陷。</p></body></html>
