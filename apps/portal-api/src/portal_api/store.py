@@ -16,7 +16,17 @@ from typing import Any
 
 import psycopg
 
-DSN = os.environ.get("DIP_PG_DSN", "postgresql://dip:dip@127.0.0.1:15432/dip")
+DEFAULT_DSN = "postgresql://dip:dip@127.0.0.1:15432/dip"
+# 一定要带 connect_timeout：libpq 默认无限等待，数据库不可达时会**静默挂死**
+# （实测：裸 socket 2 秒就 ConnectionRefused，psycopg 却能挂 60 秒以上 —— 见验证报告 P0-3）
+CONNECT_TIMEOUT = int(os.environ.get("DIP_PG_CONNECT_TIMEOUT", "3"))
+
+
+def _dsn() -> str:
+    dsn = os.environ.get("DIP_PG_DSN", DEFAULT_DSN)
+    if "connect_timeout" not in dsn:
+        dsn += ("&" if "?" in dsn else "?") + f"connect_timeout={CONNECT_TIMEOUT}"
+    return dsn
 
 SCHEMA = """
 create table if not exists sessions (
@@ -70,7 +80,7 @@ def available() -> bool:
 
 @contextmanager
 def connect():
-    conn = psycopg.connect(DSN, autocommit=True)
+    conn = psycopg.connect(_dsn(), autocommit=True, connect_timeout=CONNECT_TIMEOUT)
     try:
         yield conn
     finally:

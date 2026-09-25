@@ -5,6 +5,7 @@ B2 会在这里挂上真正的编排（dip_agent），B5 补身份/会话/审计
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dip_core import load_settings
@@ -18,13 +19,21 @@ from .routers import agent, audit, health, lineage, reports
 
 settings = load_settings()
 
-app = FastAPI(title="数据智能平台 · portal-api", version="0.2.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """建表放在 startup，**绝不能放在 import 期**：
 
-# 启动时幂等建表（数据库不可用不影响平台可用，界面会提示"未落库"）
-try:
-    store.init_schema()
-except Exception as exc:  # noqa: BLE001
-    print(f"[portal-api] 数据库不可用，审计将不落库：{exc}")
+    1) import 期连接数据库会把「测试收集」也拖进去——数据库不可达时 pytest 直接挂死（P0-3）；
+    2) startup 里失败只是少一层留痕，平台照常可用（界面显示「未落库」）。
+    """
+    try:
+        store.init_schema()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[portal-api] 数据库不可用，审计将不落库：{exc}")
+    yield
+
+
+app = FastAPI(title="数据智能平台 · portal-api", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5190"],

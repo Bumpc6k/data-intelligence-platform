@@ -16,11 +16,25 @@ import pytest
 from lineage_client import LineageClient
 
 BASE = os.environ.get("LINEAGE_BASE", "http://127.0.0.1:18080")
-DEMO_SQL = pathlib.Path(
-    os.environ.get(
-        "LINEAGE_DEMO_SQL",
-        os.path.expanduser("~/projects/sql-lineage-mvp/docs/ds_demo_workflows/sql/wf_ads_报表/t_ads_产销存月报.sql"),
-    )
+def _demo_sql() -> pathlib.Path | None:
+    """演示 SQL 的路径必须由环境变量给出（P1-6）。
+
+    以前默认指向作者家目录，在别人机器上必然 FileNotFoundError——
+    宁可跳过并给出明确指引，也不要静默失败。
+    """
+    raw = os.environ.get("LINEAGE_DEMO_SQL")
+    if not raw:
+        here = pathlib.Path(__file__).resolve()
+        guess = next((p for p in here.parents if (p / "docs/ds_demo_workflows").is_dir()), None)
+        raw = str(guess / "docs/ds_demo_workflows/sql/wf_ads_报表/t_ads_产销存月报.sql") if guess else ""
+    p = pathlib.Path(raw).expanduser() if raw else None
+    return p if p and p.is_file() else None
+
+
+DEMO_SQL = _demo_sql()
+requires_demo_sql = pytest.mark.skipif(
+    DEMO_SQL is None,
+    reason="未找到演示 SQL：把 LINEAGE_DEMO_SQL 指向内核仓库的 t_ads_产销存月报.sql（见 README 快速开始）",
 )
 
 pytestmark = pytest.mark.smoke
@@ -48,8 +62,9 @@ def test_health_and_kb_summary():
 
 
 @requires_kernel
+@requires_demo_sql
 def test_analyze_and_upstream_end_to_end():
-    sql = DEMO_SQL.read_text(encoding="utf-8")
+    sql = DEMO_SQL.read_text(encoding="utf-8")  # type: ignore[union-attr]
     with LineageClient(BASE) as c:
         a = c.analyze(sql, dialect="hive")
         assert a.ok, a.error
