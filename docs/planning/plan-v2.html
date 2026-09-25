@@ -1,0 +1,128 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>v2 项目规划 v1</title><style>body{font:12.5px/1.65 -apple-system,"Microsoft YaHei",sans-serif;max-width:940px;margin:0 auto;padding:22px 26px;color:#111}h1{font-size:19px}h2{font-size:15px;margin-top:20px;border-left:3px solid #4f46e5;padding-left:9px}h3{font-size:13.5px;margin-top:14px}table{border-collapse:collapse;width:100%;margin:6px 0;font-size:11px}th,td{border:1px solid #ccc;padding:4px 6px;vertical-align:top}th{background:#f4f5f7}code{background:#f2f3f6;padding:1px 4px;border-radius:4px;font-size:10.5px}pre{background:#f7f8fa;border:1px solid #e6e8ec;border-radius:6px;padding:8px;font-size:10.5px}blockquote{border-left:3px solid #ddd;margin:6px 0;padding-left:10px;color:#555}li{margin-left:16px}</style></head><body><h1>v2 项目规划 v1（Harness + 插件化）</h1>
+<blockquote> 2026-09-26 ｜ 依据：《架构讨论：Harness + 插件化》§9 选型与契约 + <b>四份验证结果</b> ｜ 面向：协作者 / 项目负责人</blockquote>
+<p>---</p>
+<h2>0. 一页纸</h2>
+<table>
+<tr><th>项</th><th>结论</th></tr>
+<tr><td>目标</td><td>对话即入口，<b>回答必带凭证</b>；能力以 <b>Skill</b> 增长，内核不动</td></tr>
+<tr><td>技术底座</td><td>DeepSeek API（薄网关）＋ <b>DeepSeek Harness（dsh）</b> 作插件运行时与 Web 壳 ＋ <b>MCP</b> 作 skill 通道</td></tr>
+<tr><td>安全</td><td><b>防火墙独立服务</b>（三档：自动通过 / 需上级审批 / 禁止）＋ <b>出口事实校验</b>（回执白名单）＋ 全链路审计落库</td></tr>
+<tr><td>知识</td><td><b>双通道</b>：结构化通道（唯一可产出结论）＋ 文档通道（WeKnora，仅背景）</td></tr>
+<tr><td>四个里程碑</td><td>M1 垂直切片 → M2 安全三件 → M3 知识双通道 → M4 前端与演示固化</td></tr>
+<tr><td>当前进度</td><td>垂直切片的技术前提<b>已验证</b>；T3/T4 仅有原型，尚未进仓库</td></tr>
+<tr><td>人力假设</td><td>2~4 人业余时间，任务<b>互不依赖</b>、一周一轮</td></tr>
+</table>
+<p>---</p>
+<h2>1. 目标与范围</h2>
+<h3>1.1 P1 必须做到（验收即以此为准）</h3>
+<li>在 Web 对话框里问「<b>ads.ads_产销存月报 的产量怎么来的？</b>」，得到带 <b>3 条凭证</b>（血缘图 / 词表 / 口径公式）的答案，状态 <code>verified</code>、置信度、版本号齐全。</li>
+<li>任何结论都能点开溯源：血缘图可交互、口径卡展示公式与来源、报告可打开。</li>
+<li><b>危险动作拦得住</b>：<code>truncate</code>/<code>drop</code> 被拒；生产写与跨环境动作要求上级审批；只读自动通过；<b>每次判定都留痕</b>。</li>
+<li><b>模型编不出来的东西谁也编不了</b>：模型输出里出现回执之外的表名/字段/数字 → 被出口校验拦下（有测试）。</li>
+<li>有价值的业务知识可<b>经人确认后入库</b>（候选池 → 责任人审核 → 版本化）。</li>
+<h3>1.2 明确不做（本轮）</h3>
+<p>用户与权限管理整套、审批流转引擎与多人会签、调度平台<b>写操作</b>的真实落地（DataWorks/Airflow 适配）、知识图谱可视化、移动端、性能优化、多租户。</p>
+<h3>1.3 冻结资产（只调用、按接口复用）</h3>
+<p>数据智能内核（17 端点，<b>注意：内核并非只读</b> —— 含 <code>/generate/*</code> 且 <code>/analyze</code> 落盘报告）、<code>integrations/lineage-client</code>、<code>packages/dip-contracts</code>、审计库 <code>dip-pg</code>、对话前端（静态迭代版）。</p>
+<p>---</p>
+<h2>2. 里程碑</h2>
+<table>
+<tr><th>#</th><th>里程碑</th><th>完成标志（可演示）</th><th>依赖</th></tr>
+<tr><td><b>M1</b></td><td><b>垂直切片打通</b></td><td>在 dsh 的 Web 壳里问一句业务问题 → 经 MCP 调到我们的 skill → 返回带凭证的结构化答案</td><td>无</td></tr>
+<tr><td><b>M2</b></td><td><b>安全三件就位</b></td><td>危险动作被拦、审批可留痕、模型编造被拦（各有一个反例测试）</td><td>M1（需要真实调用链）</td></tr>
+<tr><td><b>M3</b></td><td><b>知识双通道</b></td><td>结构化通道可<b>写</b>（候选池→审核→版本化，带回滚）；文档通道（WeKnora）可被检索并标注来源</td><td>M1</td></tr>
+<tr><td><b>M4</b></td><td><b>前端与演示固化</b></td><td>一条命令起全栈 → 走完验收路径 → 出截图/日志存证</td><td>M1、M2</td></tr>
+</table>
+<blockquote> 节奏建议：<b>M1 两周内必须出结果</b>（它决定后面所有事是否成立）；每个里程碑结束做一次 15 分钟演示 + 复盘。</blockquote>
+<p>---</p>
+<h2>3. 工作分解（拆到「一个 PR 能合并」）</h2>
+<h3>M1 垂直切片</h3>
+<table>
+<tr><th>ID</th><th>工作项</th><th>交付物</th><th>边界（不要做）</th><th>验收（可执行）</th><th>规模</th></tr>
+<tr><td>M1-01</td><td>dsh 起壳与版本锁定</td><td><code>docs/collaboration/notes/dsh-setup.md</code>（Node/pnpm 版本、镜像源、token URL、已知坑）+ 锁版本写法</td><td>不接业务 skill、不做鉴权</td><td>新人照文档一次跑通；截图/录屏</td><td>S</td></tr>
+<tr><td>M1-02</td><td>skill 契约声明与校验器</td><td><code>dip_skills/spec.py</code>（9 类字段，YAML 解析）+ 缺失/越界字段即报错 + 模板样例</td><td>不做 skill 运行时</td><td>缺字段的声明被拒（有测试）；模板可复制</td><td>M</td></tr>
+<tr><td>M1-03</td><td>血缘 skill（MCP 服务）</td><td>包装内核 <code>/analyze</code> + <code>/upstream</code>，<b>带契约声明与回执</b>（来源端点/耗时/证据数）</td><td>只做 1 个 skill；不碰写操作</td><td>经 MCP 被调用返回结构化结果；<code>gate</code> 绿</td><td>M</td></tr>
+<tr><td>M1-04</td><td>模型网关（薄层）</td><td>OpenAI 兼容入口；配置即可换模型；限流与记账字段</td><td>不做提示词工程</td><td>换模型只改配置（给一段 diff 证明）</td><td>M</td></tr>
+<tr><td>M1-05</td><td>出口事实校验器</td><td>入参（模型文本 + 回执白名单）→ 越界即拦，<code>dip-contracts/guards.py</code></td><td>不依赖模型实现</td><td><b>3 正例 + 3 反例</b>：编造表名/字段/数字被拦</td><td>M</td></tr>
+<tr><td>M1-06</td><td>端到端串起来</td><td>一条命令起 dsh + skill + 网关，走完 M1 验收问题</td><td>—</td><td>输出存 <code>docs/evidence/m1-*.txt</code></td><td>S</td></tr>
+</table>
+<p><b>M1 特有陷阱（已在验证中实测）</b>：表名/字段名含中文（<code>ads.ads_产销存月报</code>），用 ASCII 正则做白名单会<b>漏检全部中文标识符</b>——必须 Unicode 感知（<code>\p{L}\p{N}</code> + <code>u</code>；Python 用 <code>re.UNICODE</code> + <code>[\w\u4e00-\u9fff]</code>），且<b>要有中文用例</b>。</p>
+<h3>M2 安全三件</h3>
+<table>
+<tr><th>ID</th><th>工作项</th><th>交付物</th><th>边界</th><th>验收</th><th>规模</th></tr>
+<tr><td>M2-01</td><td>防火墙服务（独立进程）</td><td>HTTP 接口：<code>judge</code>（判定）/ <code>verify</code>（校验令牌）+ 策略表（YAML）</td><td>不做审批流转引擎</td><td>三档各 1 例；策略表可改且改动有记录</td><td>M</td></tr>
+<tr><td>M2-02</td><td>令牌机制</td><td>一次性 + 绑动作指纹 + 5 分钟时效</td><td>—</td><td><b>第二次使用同一令牌被拒</b>（有测试）</td><td>S</td></tr>
+<tr><td>M2-03</td><td>判定落库</td><td>复用 <code>dip-pg</code>：判定依据、审批人、结果</td><td>—</td><td>四次判定可在 <code>/api/audit</code> 查到</td><td>S</td></tr>
+<tr><td>M2-04</td><td>中文动作名用例</td><td>策略表至少 1 条中文动作（&quot;上线工作流到生产&quot;）</td><td>—</td><td>中文动作<b>必须命中策略</b>，不得落到默认档（验证报告实测过这个静默失效）</td><td>S</td></tr>
+<tr><td>M2-05</td><td>未命中默认档显式化</td><td>策略表显式声明 <code>default_tier</code></td><td>—</td><td>未命中时按声明档处理，且日志写明&quot;未命中&quot;</td><td>S</td></tr>
+</table>
+<h3>M3 知识双通道</h3>
+<table>
+<tr><th>ID</th><th>工作项</th><th>交付物</th><th>边界</th><th>验收</th><th>规模</th></tr>
+<tr><td>M3-01</td><td>候选池与审核流</td><td><code>knowledge_candidates</code> 表 + <code>候选 → 审核 → 入库</code> 接口</td><td>不做审核台 UI</td><td>无来源脚本的候选<b>入不了库</b>（有测试）</td><td>M</td></tr>
+<tr><td>M3-02</td><td>版本与回滚</td><td>口径版本号 + 回滚接口</td><td>—</td><td>回滚后 <code>/kb/metric</code> 返回上一版本</td><td>M</td></tr>
+<tr><td>M3-03</td><td>冲突仲裁</td><td>同字段两条公式 → 必须择一，不允许并存</td><td>—</td><td>提交冲突候选被拒并说明冲突项</td><td>S</td></tr>
+<tr><td>M3-04</td><td>文档通道（WeKnora）</td><td>部署 + MCP 接入 + <b>&quot;仅背景、不产出结论&quot;</b> 的调用约束</td><td>不让它进入结论链路</td><td>问业务口径时<b>结构化通道优先</b>，文档通道仅补充说明（有测试断言）</td><td>M</td></tr>
+<tr><td>M3-05</td><td>提炼流水线</td><td>解析 → LLM 初筛 → 规则校验 → 候选池</td><td>不做全量初始化（先 1 个项目、只出报告）</td><td>一个项目跑通并出报告 + 人工抽检记录</td><td>M</td></tr>
+</table>
+<h3>M4 前端与演示固化</h3>
+<table>
+<tr><th>ID</th><th>工作项</th><th>交付物</th><th>边界</th><th>验收</th><th>规模</th></tr>
+<tr><td>M4-01</td><td>renderer 插件机制</td><td>前端按 skill 声明的 <code>renderer</code> 分派（table/graph/sql/diff）</td><td>不重做设计</td><td>四种视图各有一次真实渲染</td><td>M</td></tr>
+<tr><td>M4-02</td><td>对话接入 dsh 壳</td><td>壳体里的对话能调通我们的 skill</td><td>—</td><td>截图 + 录屏</td><td>M</td></tr>
+<tr><td>M4-03</td><td>一键起全栈 + 一键验收</td><td><code>ops/demo.sh</code>（起 PG/内核/平台/dsh）+ <code>ops/gate.sh --demo</code></td><td>—</td><td>新机器一条命令走完验收路径</td><td>M</td></tr>
+<tr><td>M4-04</td><td>演示资产</td><td>点击路径文档 + 截图/录屏 + 证据目录</td><td>—</td><td>换台机器按文档能复现</td><td>S</td></tr>
+</table>
+<p>---</p>
+<h2>4. 人力与并行建议</h2>
+<table>
+<tr><th>角色</th><th>适合谁</th><th>主要工作项</th><th>备注</th></tr>
+<tr><td><b>A · 前端/Node</b></td><td>熟 TypeScript</td><td>M1-01（dsh）、M4-01/02</td><td>唯一碰 dsh 的人，避免多人踩同一个预览版</td></tr>
+<tr><td><b>B · 后端/Python</b></td><td>熟 Python 服务</td><td>M2-01~05（防火墙）、M1-04（网关）</td><td>安全是独立服务，边界清楚、易并行</td></tr>
+<tr><td><b>C · 数据/知识</b></td><td>懂业务口径（<b>建议你本人或最懂口径的人</b>）</td><td>M3-01~05</td><td>知识质量是产品命门，必须业务视角把关</td></tr>
+<tr><td><b>D · 测试/验收</b></td><td>细心、爱找反例</td><td>M1-05 反例、M2-04/05、M4-03/04</td><td>也可以由 A/B 兼任；<b>反例比正例值钱</b></td></tr>
+</table>
+<p><b>并行规则</b>（沿用协作规范）：一任务一 PR；<code>bash ops/gate.sh</code> 必须全绿才提；PR 里写&quot;怎么验证&quot;；冻结资产只按接口调用。</p>
+<p><b>关键路径</b>：M1-02（契约）→ M1-03（skill）→ 其余全部解锁。<b>先把 M1-02/03 派出去。</b></p>
+<p>---</p>
+<h2>5. 验收与演示</h2>
+<p><b>一条验收路径</b>（每条都要有存证，存 <code>docs/evidence/</code>）：</p>
+<li>一条命令起全栈（PG + 内核 + 平台 + dsh 壳）</li>
+<li>在对话框问旗舰问题 → 得到答案 + 3 条凭证 + <code>status/confidence/version</code></li>
+<li>点开凭证：血缘图可交互、口径卡有公式与来源（行号缺失时明确标注&quot;文件级&quot;）</li>
+<li>触发一次危险动作（<code>truncate</code>）→ 被拒 + 审计可查</li>
+<li>触发一次生产写 → 要求上级审批 → 审批后被放行（令牌不可复用）</li>
+<li>构造一次&quot;模型编造表名&quot; → 被出口校验拦下</li>
+<li>知识回写：一条无来源脚本的候选 → 入不了库</li>
+<p><b>存证要求</b>：命令 + 原始输出（不截断关键行）+ 截图；<b>反例必须留</b>。</p>
+<p>---</p>
+<h2>6. 风险清单</h2>
+<table>
+<tr><th>风险</th><th>影响</th><th>对策</th></tr>
+<tr><td><b>dsh 是 v0.1 预览版</b>，API 可能破坏性变更</td><td>前端与插件层返工</td><td>锁版本不追 latest；<b>契约锁在 MCP 层</b>，外壳可替换；只让一人碰 dsh</td></tr>
+<tr><td>DeepSeek API 波动/限流/成本</td><td>M1 就卡住（<b>已决定不保留无模型降级</b>）</td><td>网关层做超时/重试/降级<b>提示</b>（不静默失败）；预算上限与调用记账</td></tr>
+<tr><td>知识回写把幻觉灌进知识库</td><td>污染地基，后面全错</td><td>候选池 + 责任人审核 + 版本回滚 + <b>无来源不入库</b></td></tr>
+<tr><td>中文标识符导致校验静默失效</td><td>&quot;以为拦住了&quot;</td><td>出口校验/防火墙<b>必须有中文用例</b>；未命中策略显式落默认档并留痕</td></tr>
+<tr><td>内核虽冻结但<b>并非只读</b></td><td>安全假设错误</td><td>客户端保持只读；任何写类调用必须过防火墙；<code>/analyze</code> 落盘报告视为已知副作用</td></tr>
+<tr><td>业余时间、节奏不稳</td><td>里程碑拖期</td><td>任务一周可交、互不依赖；每周 15 分钟同步；<b>宁可小步快跑，不要大 PR</b></td></tr>
+<tr><td>Windows/WSL 环境差异</td><td>脚本在别人机器上跑不动</td><td>启动脚本自动探测 venv 布局；<b>中文 Windows 下 HTTP 验证必须显式 UTF-8</b>（否则误判为产品缺陷）</td></tr>
+</table>
+<p>---</p>
+<h2>7. 与 v1 的关系（不推倒重来）</h2>
+<table>
+<tr><th>v1 已实现</th><th>v2 怎么处理</th></tr>
+<tr><td>编排（实体识别/意图/计划/证据装配/答案成型）</td><td><b>保留为 skill 的实现逻辑</b>，由 harness 调度；规则模式的意图判定可留作 skill 内部判断</td></tr>
+<tr><td>统一结果模型 + status 判定（ADR-0002）</td><td><b>直接复用</b>，出口校验建在它之上（本次规划的 M1-05）</td></tr>
+<tr><td>审计与会话落库（ADR-0005）</td><td>复用，扩展记录防火墙判定与审批人（M2-03）</td></tr>
+<tr><td>对话前端（静态迭代版）</td><td>复用为 renderer 的宿主（M4-01）</td></tr>
+<tr><td>内核与 17 端点契约</td><td>冻结复用</td></tr>
+</table>
+<p>---</p>
+<h2>8. 现在我建议的第一批派单（可直接发）</h2>
+<table>
+<tr><th>派给</th><th>任务</th><th>卡片</th></tr>
+<tr><td>B（后端）</td><td><b>M1-02 skill 契约声明与校验器</b></td><td>见 §3（关键路径，先做）</td></tr>
+<tr><td>A（前端/Node）</td><td><b>M1-01 dsh 起壳与版本锁定</b>（验证报告已给 80% 内容，补齐 3 个坑）</td><td>见 §3</td></tr>
+<tr><td>D（测试）</td><td><b>M1-05 出口事实校验器 + 反例</b>（含中文用例）</td><td>见 §3</td></tr>
+<tr><td>C（数据）</td><td><b>M3-04 WeKnora 部署与&quot;仅背景&quot;约束</b>（可并行，不阻塞 M1）</td><td>见 §3</td></tr>
+</table></body></html>
