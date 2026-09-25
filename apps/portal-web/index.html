@@ -700,7 +700,7 @@ function renderContext(a, question) {
     '<h5>本次提问</h5><div class="it">' + question + '</div>' +
     '<h5>引用与调用 · ' + rows.length + ' 条</h5>' +
     rows.map(r => '<div class="it">' + r + '</div>').join('') +
-    '<div class="meta">mode=' + a.mode + ' · 会话（P1 内存，W-112 落库）· 审计落库见 W-117</div>');
+    '<div class="meta">mode=' + a.mode + ' · 已落库（PostgreSQL）：会话 / 消息 / 审计 · 留痕号见结论卡</div>');
 }
 
 function renderPanel(a, question) {
@@ -709,8 +709,107 @@ function renderPanel(a, question) {
   renderGraph(a.result);
   renderReport(a.result);
   renderContext(a, question);
+  loadAudit();
   const which = v && v.type === 'formula' ? 'metric' : (tableOf(a.result) ? 'graph' : 'ctx');
   if (typeof pick === 'function') pick(which);
+}
+
+
+/* ================= B3：会话列表 / 审计流水 / 留痕号 ================= */
+let CURRENT_SESSION = SESSION;
+
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleString('zh-CN', {hour12:false}).slice(5); } catch (e) { return iso; }
+}
+
+/* 左侧会话列表：读 /api/sessions（刷新后历史真的在；DB 不可用时退回提示） */
+async function loadSessions() {
+  const box = document.getElementById('convs');
+  if (!box) return;
+  const list = box.querySelectorAll('.cv');
+  list.forEach(n => n.remove());
+  const ft = box.querySelector('.ft');
+  try {
+    const r = await fetch(API + '/api/sessions?limit=20');
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'DB 不可用');
+    if (!j.items.length) {
+      const empty = el('div','cv','（还没有历史会话）'); empty.style.color = 'var(--dim2)'; box.insertBefore(empty, ft);
+      return;
+    }
+    j.items.forEach((s, i) => {
+      const row = el('div','cv' + (s.id === CURRENT_SESSION ? ' on' : ''), (s.title || s.id).slice(0, 22));
+      row.title = s.id + ' · ' + s.turns + ' 轮 · 最近 ' + fmtTime(s.last_seen_at);
+      row.onclick = () => { CURRENT_SESSION = s.id; loadSessions(); loadAudit(); };
+      box.insertBefore(row, ft);
+      if (i === 0 && !document.querySelector('.cv.on')) row.classList.add('on');
+    });
+    const badge = box.querySelector('.ft');
+    if (badge) badge.innerHTML = '会话与审计已落库（PostgreSQL）<br>portal-api :18100 · 内核 <span class="dot"></span>';
+  } catch (e) {
+    const box2 = document.getElementById('convs');
+    const ft2 = box2.querySelector('.ft');
+    if (ft2) ft2.innerHTML = '会话存储不可用：' + String(e) + '<br>（问答仍可用，只是不留痕）';
+  }
+}
+
+/* 右侧「上下文」面板：本条回答的引用 + 本会话审计流水 */
+async function loadAudit() {
+  const card = document.getElementById('p-ctx');
+  if (!card) return;
+  card.innerHTML = '';
+  card.append(Object.assign(el('h4'), {textContent: '会话上下文 · 审计留痕'}));
+  const box = el('div');
+  box.append(el('div','meta','加载审计流水…'));
+  card.append(box);
+  try {
+    const r = await fetch(API + '/api/audit?session_id=' + encodeURIComponent(CURRENT_SESSION) + '&limit=20');
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'DB 不可用');
+    box.innerHTML = '';
+    box.append(Object.assign(el('h5'), {textContent: '会话 ' + CURRENT_SESSION + ' · 留痕 ' + j.items.length + ' 条'}));
+    j.items.forEach(it => {
+      const row = el('div','it');
+      row.innerHTML = '<span class="c c-' + (it.status === 'verified' ? 'ads' : 'dwd') + '"></span>' +
+        '#' + it.id + ' · ' + (it.value_display || '(无结论)') +
+        '<span style="margin-left:auto;color:var(--dim2)">' + it.status + ' · ' + it.kernel_calls + ' 次调用 · ' + it.total_ms + 'ms</span>';
+      row.title = it.question + '\n' + fmtTime(it.created_at) + ' · 置信度 ' + it.confidence + ' · 版本 ' + (it.version || '—');
+      row.onclick = () => showAuditDetail(it.id);
+      box.append(row);
+    });
+  } catch (e) {
+    box.innerHTML = '<div class="meta">审计不可用：' + String(e) + '（问答正常，但没留痕）</div>';
+  }
+}
+
+async function showAuditDetail(auditId) {
+  const card = document.getElementById('p-ctx');
+  card.innerHTML = '';
+  const h = el('h4');
+  h.append(document.createTextNode('留痕 #' + auditId + ' 明细 '));
+  const back = el('span','sp','← 返回流水'); back.style.cursor = 'pointer';
+  back.onclick = () => loadAudit();
+  h.append(back);
+  card.append(h);
+  const box = el('div'); box.append(el('div','meta','加载…')); card.append(box);
+  try {
+    const r = await fetch(API + '/api/audit?session_id=' + encodeURIComponent(CURRENT_SESSION) + '&limit=200');
+    const j = await r.json();
+    const it = (j.items || []).find(x => String(x.id) === String(auditId));
+    box.innerHTML = '';
+    box.append(Object.assign(el('div','fml'), {textContent: it.value_display || '(本次没有形成结论)'}));
+    box.append(Object.assign(el('dl','kv'), {innerHTML:
+      '<dt>问题</dt><dd>' + it.question + '</dd>' +
+      '<dt>时间</dt><dd>' + fmtTime(it.created_at) + '</dd>' +
+      '<dt>状态</dt><dd>' + it.status + '</dd>' +
+      '<dt>置信度</dt><dd>' + it.confidence + '</dd>' +
+      '<dt>版本</dt><dd>' + (it.version || '—') + '</dd>' +
+      '<dt>证据数</dt><dd>' + it.evidence_count + '</dd>' +
+      '<dt>内核调用</dt><dd>' + it.kernel_calls + ' 次 · 合计 ' + it.total_ms + 'ms</dd>'}));
+    box.append(Object.assign(el('div','meta'), {textContent:'这条留痕就是"平台拿什么回答的"凭据：问题、结论、状态、证据条数与调用次数都在，可在库里按 session 回查。'}));
+  } catch (e) {
+    box.innerHTML = '<div class="meta">读取失败：' + String(e) + '</div>';
+  }
 }
 
 const FORCE_STATIC = new URLSearchParams(location.search).has('static') || location.protocol === 'file:';
@@ -765,7 +864,14 @@ function renderAnswer(a, question) {
     concl.append(Object.assign(el('div','f'), {style:'font-size:13.5px;font-family:inherit',
       textContent: a.result.status === 'unresolved' ? '需要澄清 / 证据不足 —— 平台不会猜' : '本次没有形成结论'}));
   }
-  concl.append(statusBadges(a.result));
+  if (a.audit_id) {
+    const tag = el('span','b g', '留痕 ' + a.audit_id);
+    tag.style.cursor = 'pointer';
+    tag.onclick = (ev) => { ev.stopPropagation(); showAuditDetail(String(a.audit_id).replace('aud-','')); };
+    const bs = statusBadges(a.result); bs.append(tag); concl.append(bs);
+  } else {
+    concl.append(statusBadges(a.result));
+  }
   msg.append(concl);
   msg.append(Object.assign(el('div','', ), {style:'color:var(--dim);font-size:13.5px;margin:.5em 0 11px', textContent: a.text}));
 
@@ -788,6 +894,7 @@ function renderAnswer(a, question) {
   stream.scrollTop = stream.scrollHeight;
   setTimeout(() => { concl.onclick = () => pick(a.result.value && a.result.value.type==='formula' ? 'metric' : 'graph'); }, 0);
   renderPanel(a, question);
+  loadSessions();
 }
 
 function setStaticBadge(reason) {
@@ -838,6 +945,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btn) btn.onclick = () => { ask(ta.value); ta.value = ''; };
   if (ta) ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(ta.value); ta.value=''; } });
   checkHealth();
+  loadSessions();
   if (FORCE_STATIC) { setStaticBadge('强制静态模式'); renderAnswer(JSON.parse(JSON.stringify(STATIC_DEMO)), 'ads.ads_产销存月报 的产量怎么来的？'); }
   else ask('ads.ads_产销存月报 的产量怎么来的？');   // 进页面就跑一次真实问答，便于演示与截图
 });
