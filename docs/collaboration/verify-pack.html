@@ -1,0 +1,118 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><style>body{font:13px/1.7 -apple-system,"Microsoft YaHei",sans-serif;max-width:900px;margin:0 auto;padding:24px 28px;color:#111}h1{font-size:20px}h2{font-size:16px;margin-top:22px;border-left:3px solid #4f46e5;padding-left:9px}h3{font-size:14px;margin-top:16px}table{border-collapse:collapse;width:100%;margin:7px 0;font-size:11.5px}th,td{border:1px solid #ccc;padding:5px 7px;vertical-align:top}th{background:#f4f5f7}code{background:#f2f3f6;padding:1px 4px;border-radius:4px;font-size:11px}pre{background:#f7f8fa;border:1px solid #e6e8ec;border-radius:6px;padding:8px;font-size:10.5px;overflow-x:auto}blockquote{border-left:3px solid #ddd;margin:6px 0;padding-left:10px;color:#555}li{margin-left:18px}</style></head><body><h1>协作者验证包 v1 · 四个验证任务</h1>
+<blockquote> 2026-09-25 ｜ 面向协作者 ｜ 目的：<b>用一周时间验证 4 个技术假设</b>，验证结果回来后我们再写正式规划</blockquote>
+<blockquote> 开发仓库：<code>data-intelligence-platform</code>（平台）｜只读参考：<code>sql-lineage-mvp</code>（数据智能内核，<b>已冻结</b>）</blockquote>
+<p>---</p>
+<h2>0. 先读这些（按顺序，约 40 分钟）</h2>
+<p>1. 《项目规划与功能设计 v2》—— 边界、阶段、不做什么（内核仓库 <code>docs/platform-vision/</code>）</p>
+<p>2. 《设计说明书 v1.0》—— 页面、交互、设计令牌、组件清单</p>
+<p>3. 《架构讨论：Harness + 插件化》<b>§9 技术选型与契约（已定）</b> + 架构图 v3 —— <b>本次任务的依据</b></p>
+<p>4. 本包（任务卡 + 上手 + 验收）</p>
+<p><b>一句话目标</b>：对话即入口，回答必带凭证（可追溯），以及&quot;加能力 = 加 skill，内核不动&quot;。</p>
+<p>---</p>
+<h2>1. 共同规则（四个任务都适用）</h2>
+<table>
+<tr><th>规则</th><th>说明</th></tr>
+<tr><td><b>独立可完成</b></td><td>四个任务互不依赖，不需要等别人；<b>不要顺手改别人的范围</b></td></tr>
+<tr><td><b>冻结资产只调用、不修改</b></td><td>内核仓库、<code>integrations/lineage-client</code>、<code>packages/dip-contracts</code>、审计与知识库<b>只读复用</b>（见附录）</td></tr>
+<tr><td><b>一个任务一个 PR</b></td><td>分支 <code>feat/tN-简述</code>；PR 必须写清&quot;<b>怎么验证</b>&quot;（命令 + 期望输出）</td></tr>
+<tr><td><b>门禁必须绿</b></td><td><code>bash ops/gate.sh</code> → <code>GATE: ALL_PASS</code>（含 ruff + pytest + 分层守卫）；<b>红了不许提 PR</b></td></tr>
+<tr><td><b>不许提交密钥</b></td><td>DeepSeek Key 等放 <code>.env</code>（已在 .gitignore）；仓库里只留 <code>.env.example</code></td></tr>
+<tr><td><b>事实不许编</b></td><td>任何结论必须能指到来源（文件/端点/行号）；拿不到就明说&quot;没查到&quot;</td></tr>
+<tr><td><b>时间盒一周</b></td><td>到期没跑通<b>不要硬撑</b>：交&quot;卡在哪 + 已获得的证据 + 需要什么支持&quot;</td></tr>
+</table>
+<p>---</p>
+<h2>2. 任务卡</h2>
+<h3>T1 把 DeepSeek Harness（dsh）跑起来</h3>
+<table>
+<tr><th>项</th><th>内容</th></tr>
+<tr><td><b>验证什么</b></td><td>这个开源 harness 能不能在我们的环境真跑起来、能不能当插件运行时与 Web 壳</td></tr>
+<tr><td><b>交付物</b></td><td>① <code>docs/notes/dsh-setup.md</code>：从零到能对话的完整步骤（含踩坑与解决办法）② <b>版本锁定</b>写法（不追 latest）③ 一张&quot;能对话&quot;的截图或录屏</td></tr>
+<tr><td><b>边界</b></td><td><b>不要</b>做鉴权、多用户、生产部署；<b>不要</b>改 dsh 源码；<b>不要</b>接我们的业务 skill（那是 T2）</td></tr>
+<tr><td><b>验收标准</b></td><td>新人照着 <code>docs/notes/dsh-setup.md</code> 能一次跑通；文档里写明 Node/pnpm 版本、dsh 版本、启动命令、端口</td></tr>
+<tr><td><b>提示</b></td><td>仓库：<code>github.com/deepseek-ai/deepseek-harness</code>（MIT，TypeScript + Cordis，v0.1 预览版）</td></tr>
+</table>
+<h3>T2 把一个业务 skill 经 MCP 被外壳调用</h3>
+<table>
+<tr><th>项</th><th>内容</th></tr>
+<tr><td><b>验证什么</b></td><td>&quot;万物皆插件&quot;能不能落地：我们的能力包成 <b>MCP skill</b> 后，能否被 dsh 这类外壳无差别调用</td></tr>
+<tr><td><b>交付物</b></td><td>① 一个 MCP skill 服务，包装<b>现成的血缘解析</b>（内核 <code>POST /analyze</code>，只读）② 该 skill 的<b>契约声明</b>（按《架构讨论》§3 字段：name/when/input/output/side_effect/evidence_kind/renderer/timeout/idempotent/budget）③ <code>docs/notes/mcp-skill.md</code>：怎么注册、怎么被调用、返回长什么样</td></tr>
+<tr><td><b>边界</b></td><td>只包装 1 个 skill，<b>不要</b>批量包装；<b>不要</b>碰写操作类能力（建表/调度那些留给后续）</td></tr>
+<tr><td><b>验收标准</b></td><td>给一句「ads.ads_产销存月报 的产量怎么来的？」能返回结构化结果 <b>+ 回执</b>（来源端点、耗时、证据条数）；<code>bash ops/gate.sh</code> 绿；有测试用例（可用已录制的真实响应做假内核）</td></tr>
+<tr><td><b>提示</b></td><td>已录制的真实内核响应 fixture：<code>integrations/lineage-client/tests/fixtures/kernel-probe-2026-09-23.json</code>；内核服务起法见 §3</td></tr>
+</table>
+<h3>T3 模型网关（薄层）+ 出口事实校验</h3>
+<table>
+<tr><th>项</th><th>内容</th></tr>
+<tr><td><b>验证什么</b></td><td>① 能稳定接 DeepSeek API ② <b>&quot;模型不许编&quot;这件事能用机制做到</b>（不是靠提示词）</td></tr>
+<tr><td><b>交付物</b></td><td>① 薄模型网关：统一 OpenAI 兼容入口（换模型/限流/记账不改业务）② <b>出口事实校验器</b>：只允许用<b>回执里出现过的</b>表名、字段名、数字组答案；越界即拦截并标记 ③ 测试：构造&quot;模型编了一个不存在的表名/数字&quot;的输入，<b>断言被拦截</b></td></tr>
+<tr><td><b>边界</b></td><td><b>不要</b>做提示词工程调优；<b>不要</b>做多轮对话；只做&quot;网关 + 校验器 + 测试&quot;</td></tr>
+<tr><td><b>验收标准</b></td><td>拦截测试通过（给出反例与正例各 3 个）；网关能在不改进业务代码的前提下换模型（给一段配置即可切换）；<code>bash ops/gate.sh</code> 绿</td></tr>
+<tr><td><b>提示</b></td><td>校验器可以独立于模型实现（入参：模型输出文本 + 回执白名单），这样最好测</td></tr>
+</table>
+<h3>T4 智能防火墙最小版（独立服务）</h3>
+<table>
+<tr><th>项</th><th>内容</th></tr>
+<tr><td><b>验证什么</b></td><td>三档判定 + 一次性令牌 + 全量留痕，能不能独立成服务并真拦住危险动作</td></tr>
+<tr><td><b>交付物</b></td><td>① 独立服务（单独的进程/容器，提供 HTTP 接口：<code>判定</code> 与 <code>校验令牌</code>）② 策略表（可配置：动作 → 档位）③ 判定与审批<b>落审计库</b>（复用现有 <code>dip-pg</code>）④ <code>docs/notes/firewall.md</code>：三档定义、策略怎么改</td></tr>
+<tr><td><b>边界</b></td><td><b>不要</b>做审批流程引擎/多人流转（P1 只保留&quot;上一级确认一次&quot;）；<b>不要</b>接入真实调度平台写操作</td></tr>
+<tr><td><b>验收标准</b></td><td>① <code>truncate table x</code> / <code>drop table x</code> → <b>拒绝</b>；② 生产写（如&quot;上线工作流&quot;）→ <b>需审批</b>；③ 只读查询 → <b>自动通过</b>；④ 令牌<b>不可复用</b>（用两次第二次被拒）；⑤ 四次判定全部在审计库里能查到（含判定依据与审批人）</td></tr>
+<tr><td><b>提示</b></td><td>三档定义见《架构讨论》§2.2 与架构图 v3 的判定表；跨环境动作并入&quot;需审批&quot;档</td></tr>
+</table>
+<p>---</p>
+<h2>3. 上手说明（环境）</h2>
+<pre>
+# 现有可复用服务（都在本机，幂等脚本）
+bash ops/start-pg.sh                      # 审计库 PostgreSQL :15432（会话/审计已能用）
+bash /usr/local/bin/start-lineage-api.sh  # 数据智能内核 :18080（血缘/口径/报告，只读）
+bash ops/start-portal.sh                  # 平台后端 + 前端 :18100（http://127.0.0.1:18100/app/）
+
+# 开发
+make venv          # 建虚拟环境（python3.10；缺 ensurepip 先 apt install python3.10-venv）
+bash ops/gate.sh   # 一键验收：lint + 测试（提交前必须绿）
+bash ops/gate.sh --with-smoke   # 带上真内核的冒烟测试
+</pre>
+<p><b>代码结构</b>（<code>data-intelligence-platform</code>）：<code>apps/portal-api</code>（后端）、<code>apps/portal-web</code>（前端）、<code>packages/dip-contracts</code>（契约层）、<code>packages/dip-agent</code>（编排）、<code>integrations/lineage-client</code>（内核客户端）、<code>docs/adr</code>（决策记录）。</p>
+<p><b>分层铁律</b>：依赖只能自上而下（有测试强制），契约层不许引重量级依赖。</p>
+<p><b><code>.env.example</code> 建议内容</b>（新任务如需要新建）：</p>
+<pre>
+DEEPSEEK_API_KEY=sk-xxx            # 不要提交真实值
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+LLM_MODEL=deepseek-chat
+DIP_PG_DSN=postgresql://dip:dip@127.0.0.1:15432/dip
+LINEAGE_BASE_URL=http://127.0.0.1:18080
+</pre>
+<p>---</p>
+<h2>4. 验收方式（谁验、怎么验）</h2>
+<p><b>验收人：项目负责人（Hermes 代跑）</b>。流程：协作者提 PR → 我跑门禁 + <b>按任务卡的验收标准逐条执行</b> → 逐条给&quot;通过/不通过 + 证据&quot; → 全通过才合并，否则打回并写明原因。</p>
+<p><b>逐条存证要求</b>（验收只看这些）：</p>
+<p>1. 命令 + 原始输出（贴在本包 §5 的回报表里，或存 <code>docs/evidence/tN-*.txt|png</code>）</p>
+<p>2. 测试文件路径 + <code>pytest</code> 通过输出</p>
+<p>3. 关键行为的反例（如 T3 的&quot;编表名被拦&quot;、T4 的&quot;truncate 被拒&quot;）</p>
+<p>---</p>
+<h2>5. 回报格式与节奏</h2>
+<p>一周一轮；每周一次 15 分钟同步（进展 / 卡点 / 下一步）。回报按这张表填：</p>
+<table>
+<tr><th>任务</th><th>状态</th><th>证据（命令/截图/PR）</th><th>卡点</th><th>需要什么支持</th></tr>
+<tr><td>T1 dsh 起壳</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>T2 MCP skill</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>T3 网关 + 出口校验</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>T4 防火墙最小版</td><td></td><td></td><td></td><td></td></tr>
+</table>
+<p><b>回报纪律</b>：说&quot;完成了&quot;必须带证据；没完成就说卡在哪（我们宁要诚实的中途报告，不要漂亮的假完成）。</p>
+<p>---</p>
+<h2>6. 附录：当前可复用资产（<b>只调用，不修改</b>）</h2>
+<table>
+<tr><th>资产</th><th>位置 / 用法</th><th>能力</th></tr>
+<tr><td>数据智能内核</td><td><code>:18080</code>，契约 17 端点（<code>/analyze</code>、<code>/upstream</code>、<code>/impact</code>、<code>/kb/*</code>、<code>/report</code>）</td><td>SQL 血缘解析、业务口径检索、影响面、HTML 报告</td></tr>
+<tr><td>知识库（结构化）</td><td><code>/kb/search</code>、<code>/kb/metric</code>、<code>/kb/summary</code></td><td>口径 75 / 字段 298 / 术语 139 / 规则 76（<b>只读</b>）</td></tr>
+<tr><td>内核客户端</td><td><code>integrations/lineage-client</code></td><td>参数归一化、<code>success</code> 判定、超时重试、失败不抛异常</td></tr>
+<tr><td>契约层</td><td><code>packages/dip-contracts</code></td><td>统一结果模型 + <code>status</code> 判定（铁律：无凭证不出结论）</td></tr>
+<tr><td>编排（v1）</td><td><code>packages/dip-agent</code></td><td>实体识别/意图/计划/证据装配/答案成型（v2 将迁到 skill + harness）</td></tr>
+<tr><td>审计与会话</td><td><code>dip-pg</code> <code>:15432</code> + <code>/api/audit</code>、<code>/api/sessions</code></td><td>每次问答留痕：问题/调用/结论/状态/耗时</td></tr>
+<tr><td>前端（静态迭代版）</td><td><code>:18100/app/</code></td><td>对话 + 证据面板（口径/血缘/审计）已跑通</td></tr>
+<tr><td>真实响应 fixture</td><td><code>.../fixtures/kernel-probe-2026-09-23.json</code>（87 KB）</td><td>无内核也能写测试（<b>不要真编造数据</b>）</td></tr>
+</table>
+<p>---</p>
+<h2>7. 明确不在本轮范围（避免范围爆炸）</h2>
+<p>用户与权限管理、审批流转引擎、调度平台写操作、DataWorks/Airflow 适配、知识库写入通道与审核流、性能优化、多环境与多租户。</p>
+<p>—— 这些等验证结果回来、写完《v2 项目规划 v1》再排期。</p></body></html>
