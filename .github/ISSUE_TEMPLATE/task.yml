@@ -1,0 +1,33 @@
+name: 开发任务
+description: 按任务卡提交（交付物 / 边界 / 可执行验收）
+title: "[M?-??] "
+labels: ["类型-功能"]
+body:
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: 交付物
+      description: 具体到文件/接口/命令
+      placeholder: "- packages/xx/yy.py\n- tests/test_yy.py"
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: 边界（不要做什么）
+      description: 明确写出"不做"，防止范围膨胀
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收（可执行）
+      description: 每条都要能被别人跑出来；含反例
+      placeholder: "- 运行 xxx 得到 yyy\n- 反例：zzz 必须被拦"
+    validations:
+      required: true
+  - type: input
+    id: evidence
+    attributes:
+      label: 证据存放位置
+      value: docs/evidence/

@@ -16,7 +16,11 @@ USE_GH=1
 command -v gh >/dev/null 2>&1 || USE_GH=0
 [ -n "${GITHUB_TOKEN:-}" ] && USE_GH=0
 if [ "$USE_GH" = 0 ] && [ -z "${GITHUB_TOKEN:-}" ]; then
-  echo "!! 需要其一：① 安装并登录 gh（gh auth login）② 或设置 GITHUB_TOKEN"; exit 1
+  if [ "$DRY" = "--dry-run" ]; then
+    echo "（干跑模式：无需凭据，只打印将创建的内容）"
+  else
+    echo "!! 需要其一：① 安装并登录 gh（gh auth login）② 或设置 GITHUB_TOKEN"; exit 1
+  fi
 fi
 
 api_post() {  # $1=path $2=json
@@ -53,7 +57,9 @@ echo "== 2) Issues =="
 create_issue() {  # $1=标题 $2=标签(逗号分隔) $3=正文
   local title="$1" labels="$2" body="$3"
   if [ "$DRY" = "--dry-run" ]; then echo "  [dry] $title  [$labels]"; return; fi
-  if [ "$USE_GH" = 1 ]; then
+  if [ "$DRY" = "--dry-run" ]; then
+    echo "  [dry] $title  [$labels]"
+  elif [ "$USE_GH" = 1 ]; then
     gh issue create --repo "$REPO" --title "$title" --body "$body" --label "$labels" >/dev/null && echo "  ✓ $title"
   else
     local json
