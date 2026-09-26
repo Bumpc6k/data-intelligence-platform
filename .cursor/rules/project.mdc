@@ -1,0 +1,10 @@
+---
+description: 数据智能平台（DIP）项目规则 —— 先读 AGENTS.md
+alwaysApply: true
+---
+
+- **权威须知**：根目录 `AGENTS.md`（先完整读它）；协作入口 `CONTRIBUTING.md`
+- **任务来源**：GitHub Issues（`gh issue list --label M1-垂直切片`）
+- **五条铁律**：事实不许编 / 无凭证不出结论 / 没有证据=没完成 / 冻结资产只调用不修改 / main 只进 PR
+- **提交前**：`bash ops/gate.sh` 必须 `GATE: ALL_PASS`；红了不许提 PR
+- **禁止**：改 CI/门禁/测试断言来绕过红灯、提交密钥、自行决定架构、顺手改 Issue 范围外的模块

@@ -18,6 +18,19 @@
         /analyze /upstream /impact /kb/* /report …（17 个端点）
 ```
 
+## 🚩 先读这个（AI 助手 / 协作者）
+
+| 你是谁 | 从哪里开始 |
+| --- | --- |
+| **AI 助手** | [`AGENTS.md`](AGENTS.md)（权威须知：铁律、边界、环境、交付流程、已知的坑） |
+| **人类协作者** | [`CONTRIBUTING.md`](CONTRIBUTING.md)（工作流 + 三条硬规矩 + 一条命令起环境） |
+| **要认领任务** | [GitHub Issues](https://github.com/Bumpc6k/data-intelligence-platform/issues)（按 `M1-垂直切片` 等标签筛；关键路径是 #1 与 #3） |
+| **想了解全局** | [`docs/planning/2026-09-26-v2-项目规划-v1.md`](docs/planning/2026-09-26-v2-项目规划-v1.md)（里程碑 + 工作项边界与验收） |
+| **具体怎么上手** | [`docs/collaboration/2026-09-25-协作者验证包.md`](docs/collaboration/2026-09-25-协作者验证包.md) |
+| **规则细节** | [`docs/collaboration/2026-09-26-开发规范与AI协作.md`](docs/collaboration/2026-09-26-开发规范与AI协作.md) |
+
+> 给 AI 的一句话：**挑一个 Issue → 读它的边界与验收 → 小步改、带测试（含反例）→ 门禁绿 → 提 PR 并写清"怎么验证"**。拿不准就停下来问，不要猜、不要编、不要顺手改。
+
 ## 目录结构（P1：3 个部署单元 + 1 个库）
 
 | 路径 | 说明 | 对应工作项 |
