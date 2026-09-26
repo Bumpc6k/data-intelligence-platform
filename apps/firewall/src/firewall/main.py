@@ -20,7 +20,6 @@
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import os
 import pathlib
 from dataclasses import dataclass
@@ -72,7 +71,7 @@ def load_policy() -> LoadedPolicy:
 
     loaded = LoadedPolicy(
         policy=policy,
-        digest=hashlib.sha256(path.read_bytes()).hexdigest()[:12],
+        digest=policy.digest,  # 指纹由 Policy 自己算（单一真相，别在两处各算一遍）
         path=str(path),
     )
     _cache[str(path)] = (mtime, loaded)
