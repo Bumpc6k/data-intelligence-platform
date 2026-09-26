@@ -1,0 +1,175 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>开发规范与 AI 协作方式 v1</title><style>body{font:12.5px/1.65 -apple-system,"Microsoft YaHei",sans-serif;max-width:940px;margin:0 auto;padding:22px 26px;color:#111}h1{font-size:19px}h2{font-size:15px;margin-top:20px;border-left:3px solid #4f46e5;padding-left:9px}h3{font-size:13.5px;margin-top:14px}table{border-collapse:collapse;width:100%;margin:6px 0;font-size:11px}th,td{border:1px solid #ccc;padding:4px 6px;vertical-align:top}th{background:#f4f5f7}code{background:#f2f3f6;padding:1px 4px;border-radius:4px;font-size:10.5px}pre{background:#f7f8fa;border:1px solid #e6e8ec;border-radius:6px;padding:8px;font-size:10.5px;white-space:pre-wrap}blockquote{border-left:3px solid #ddd;margin:6px 0;padding-left:10px;color:#555}li{margin-left:16px}</style></head><body><h1>开发规范与 AI 协作方式 v1</h1>
+<blockquote> 2026-09-26 ｜ 适用：2 名开发者（含各自使用的 AI 助手）｜ 配套：<code>CONTRIBUTING.md</code>、<code>docs/collaboration/2026-09-25-协作者验证包.md</code>、<code>docs/planning/2026-09-26-v2-项目规划-v1.md</code></blockquote>
+<p><b>这份文档解决一件事</b>：两个人（以及他们各自的 AI）并行开发时，<b>不打架、不互相污染、不把&quot;没验证&quot;当&quot;已完成&quot;</b>。</p>
+<p>---</p>
+<h2>1. 四条基本约定（先记住这四条，其余都是细节）</h2>
+<table>
+<tr><th>#</th><th>约定</th><th>为什么</th></tr>
+<tr><td>1</td><td><b>一个 Issue = 一个分支 = 一个 PR</b>，不串任务</td><td>串起来就无法独立验收，出问题也不知道是谁的</td></tr>
+<tr><td>2</td><td><b><code>main</code> 只进 PR</b>，谁都不许直接推</td><td>保护线：main 永远可运行、门禁永远绿</td></tr>
+<tr><td>3</td><td><b>没有证据 = 没完成</b></td><td>&quot;我实现了&quot;不算；要命令 + 原始输出 + 反例</td></tr>
+<tr><td>4</td><td><b>冻结资产只调用不修改</b></td><td>内核、<code>lineage-client</code>、<code>dip-contracts</code>、<code>dip-pg</code> 是地基，动它们要单独开 Issue</td></tr>
+</table>
+<p>---</p>
+<h2>2. 仓库与分支</h2>
+<pre>
+main                 ← 只接受 PR；始终可运行、门禁绿
+└── feat/m1-03-lineage-skill     功能（对应 Issue #3）
+└── fix/m2-04-cjk-policy         修缺陷
+└── docs/collab-ai-rules         文档
+└── chore/bump-ruff              杂务
+</pre>
+<li>分支名 = <code>&lt;类型&gt;/&lt;issue 编号或里程碑&gt;-&lt;简述&gt;</code>；<b>分支活不过一周</b>，大了就拆。</li>
+<li>开工前必须 <code>git pull --rebase</code>；推送前 <code>git fetch &amp;&amp; git rebase origin/main</code>（保持线性，方便回溯）。</li>
+<li>合并方式：<b>Squash merge</b>（一个 Issue 在 main 上只留一个提交，便于回滚）。</li>
+<li>禁止 <code>git push --force</code>（除非是你自己未合并的分支，且写明原因）。</li>
+<h2>3. 提交信息</h2>
+<pre>
+&lt;类型&gt;(&lt;范围&gt;): &lt;一句话说清做了什么&gt;
+
+- 关键点 1（为什么这么改，而不是怎么改）
+- 关键点 2
+
+Closes #3
+</pre>
+<p>类型：<code>feat</code> / <code>fix</code> / <code>docs</code> / <code>refactor</code> / <code>test</code> / <code>chore</code> / <code>perf</code>。</p>
+<p>要求：<b>一次提交只做一件事</b>；中文正文；<b>必须关联 Issue</b>（<code>Closes #N</code> 或 <code>Refs #N</code>）。</p>
+<p>---</p>
+<h2>4. 代码规范（Python 为主，前端待开工时补）</h2>
+<h3>4.1 通用</h3>
+<table>
+<tr><th>规则</th><th>说明</th></tr>
+<tr><td>格式化与静态检查</td><td><b>ruff</b>（配置在 <code>pyproject.toml</code>，行宽 118，目标 py310）；<code>ruff check .</code> 必须干净</td></tr>
+<tr><td>命名</td><td><b>标识符用英文</b>，docstring / 注释用中文；不要拼音（<code>chanliang</code> 这种是内核历史包袱，新代码别学）</td></tr>
+<tr><td>函数长度</td><td>超过 60 行就拆；一个函数只做一件事</td></tr>
+<tr><td>类型标注</td><td>所有公共函数必须有类型标注；<code>from __future__ import annotations</code> 打头</td></tr>
+<tr><td>日志</td><td>库代码用 <code>logging</code>；<code>print</code> 只允许出现在 CLI / 脚本 / 启动提示里</td></tr>
+<tr><td>异常</td><td><b>不许裸 <code>except:</code></b>；要么处理要么抛出，捕获了就要<b>记录并说明原因</b></td></tr>
+<tr><td>注释</td><td>只写&quot;为什么&quot;，不写&quot;是什么&quot;（代码本身说明是什么）；<b>反直觉的处理必须写原因</b></td></tr>
+</table>
+<h3>4.2 分层铁律（有测试强制，违反了会红）</h3>
+<pre>
+apps/portal-api  →  packages/dip-agent  →  packages/dip-core / dip-contracts
+apps/portal-api  →  integrations/lineage-client
+dip-contracts / dip-core / lineage-client  →  **不得**依赖上层
+</pre>
+<li>契约层（<code>dip-contracts</code>）<b>只许</b>用 pydantic + 标准库（<code>tests/test_layering.py</code> 会拦）。</li>
+<li>只有 API 层知道数据库；<code>dip-agent</code> 不许出现 SQL / 连接串。</li>
+<h3>4.3 数据与世界观的硬规矩</h3>
+<table>
+<tr><th>规矩</th><th>后果</th></tr>
+<tr><td><b>事实不许编</b>：结论必须能指到来源（文件/端点/行号）</td><td>拿不到就说&quot;没查到&quot;，不许编一个像样的回答</td></tr>
+<tr><td><b>无凭证不出结论</b></td><td><code>evidence</code> 为空时必须不出数字/公式（有测试断言）</td></tr>
+<tr><td><b>中文标识符要 Unicode 感知</b></td><td>表名/字段名含中文，用 <code>[A-Za-z_]\w*</code> 会<b>漏检</b>——测试还会假绿</td></tr>
+<tr><td><b>测试不许&quot;为了让通过率好看&quot;改断言</b></td><td>改断言 = 改需求，必须走 Issue 讨论</td></tr>
+<tr><td><b>不许提交密钥</b></td><td>本地 <code>.env</code>（已 gitignore），仓库只留 <code>.env.example</code></td></tr>
+<tr><td><b>不许改 CI / 门禁规则来绕过红灯</b></td><td>门禁是共同底线，改它要单独 Issue + 两人同意</td></tr>
+</table>
+<h3>4.4 SQL 与数据开发侧（Windows 端做数据开发时同样适用）</h3>
+<li>脚本命名：<code>t_&lt;表名&gt;.sql</code>；<b>每个脚本头部注释里写清这段 SQL 的业务含义</b>——注释就是口径的原材料，会被知识提炼流水线读走。</li>
+<li>建表/改表脚本必须能被解析器解析（别写方言扩展或动态拼接），否则血缘解析会漏。</li>
+<li><b>demo 数据与生产数据物理隔离</b>；任何情况下不许把公司生产数据带出来跑（这条是红线，没有例外）。</li>
+<li>口径变更走<b>候选池 → 责任人审核 → 版本化入库</b>，不许直接改知识库。</li>
+<p>---</p>
+<h2>5. 测试规范</h2>
+<table>
+<tr><th>要求</th><th>说明</th></tr>
+<tr><td>新功能必须带测试</td><td>没有测试的功能不算完成</td></tr>
+<tr><td><b>必须有反例</b></td><td>至少一条&quot;该被拒绝/该失败&quot;的用例；反例比正例值钱</td></tr>
+<tr><td>无依赖优先</td><td>用录制 fixture（<code>integrations/lineage-client/tests/fixtures/</code>）而不是真起内核</td></tr>
+<tr><td>需要外部服务就跳过</td><td><code>pytest.mark.skipif</code> + 明确的 skip 原因（不许静默失败）</td></tr>
+<tr><td><b>测试必须幂等</b></td><td>用唯一 id（如 <code>uuid4</code>）而不是固定会话名——固定 id 会在同库重复跑时累积数据、导致假红（我们踩过）</td></tr>
+<tr><td>慢测试分类</td><td>需要真内核/真库的打 <code>smoke</code> 标记，<code>make smoke</code> 单独跑</td></tr>
+</table>
+<p>---</p>
+<h2>6. 门禁（提交前的唯一标准）</h2>
+<pre>
+bash ops/gate.sh        # lint + 测试 → 必须看到 GATE: ALL_PASS
+bash ops/gate.sh --with-smoke   # 带上真内核的冒烟
+</pre>
+<li><b>红了不许提 PR</b>（这是我们两次踩过的坑：红灯推上去，reviewer 白跑）。</li>
+<li>本地门禁与 CI 跑的是同一条命令；<b>CI 红而本地绿 = 环境差异</b>，必须在 PR 里说明并修。</li>
+<li>Windows 用户：脚本自动探测 <code>.venv/Scripts</code> 与 <code>.venv/bin</code>；<b>HTTP 验证必须显式 UTF-8</b>（否则中文变乱码，会被误判成产品缺陷）。</li>
+<p>---</p>
+<h2>7. AI 协作方式（本次新增的重点）</h2>
+<h3>7.1 给 AI 的任务上下文（避免&quot;上下文的公地悲剧&quot;）</h3>
+<table>
+<tr><th>做法</th><th>说明</th></tr>
+<tr><td><b>一个 Issue 一个会话</b></td><td>别把整个项目历史灌进一个会话；Issue 描述 + 相关 ADR 就是上下文</td></tr>
+<tr><td>AI 先读三份</td><td><code>CONTRIBUTING.md</code> → 相关 Issue → 本文件（+ 涉及的 ADR）</td></tr>
+<tr><td>明确&quot;边界&quot;再开工</td><td>把 Issue 里的<b>边界（不要做什么）</b>原样贴给 AI，它最爱扩范围</td></tr>
+<tr><td>让它先复述</td><td>&quot;用三句话复述你要做什么、边界在哪、验收是什么&quot;——复述错了就别让它动手</td></tr>
+</table>
+<h3>7.2 AI 的权限边界（写进提示词）</h3>
+<p><b>允许</b>：读改本仓库代码、写测试、跑命令、提 PR（草稿）。</p>
+<p><b>必须人来做</b>：合并 PR、改 CI / 门禁规则、改冻结资产、处理凭证、<code>force push</code>、推翻既有决策（ADR）。</p>
+<p><b>绝对禁止</b>：把没跑通的验证说成已验证；伪造输出/截图；为了让门禁变绿而改测试或门禁；在仓库里写密钥；把生产数据带出来。</p>
+<h3>7.3 AI 交付的&quot;证据三件套&quot;（缺一不可）</h3>
+<li><b>命令 + 原始输出</b>（关键行不截断，贴的是真跑的结果）</li>
+<li><b>测试文件路径 + 通过输出</b>（含至少一条反例）</li>
+<li><b>边界声明</b>：明确说&quot;我没有做 X（按边界要求）&quot;，让人知道哪里没被覆盖</li>
+<blockquote> 一句话：<b>AI 说&quot;完成了&quot;不算数，能被我复跑出同样结果才算数。</b></blockquote>
+<h3>7.4 人审责任（不可转移）</h3>
+<li>AI 生成的代码，<b>提交人必须能逐行解释</b>——解释不了的代码不许合并。</li>
+<li>PR 里新增一栏 <b>&quot;AI 参与度&quot;</b>：哪些部分由 AI 生成/改写、哪些是人工重写、你亲手验证了哪几条。</li>
+<li>这是诚信要求，不是形式：审查时我会抽查提问（&quot;这行为什么这么写&quot;）。</li>
+<h3>7.5 两个人 + 两个 AI 的协作纪律</h3>
+<table>
+<tr><th>场景</th><th>规则</th></tr>
+<tr><td>同一个文件</td><td><b>同一时间只允许一个人（或一个 AI）改</b>；开工前在 Issue 里留言&quot;我在改 X 文件&quot;</td></tr>
+<tr><td>接口未定</td><td><b>契约先行</b>：先定接口（哪怕只写签名 + 文档），再并行实现；不许各写一套</td></tr>
+<tr><td>发现别人的坑</td><td><b>不要顺手改</b>：开 Issue 或在 PR 里留言；顺手改会造成 review 冲突</td></tr>
+<tr><td>大改动</td><td>先开 Issue 写方案（半页），对方点头再动手</td></tr>
+<tr><td>卡住了</td><td>24 小时内上报（格式见 §9），不要闷头硬撑到周末</td></tr>
+<tr><td>冲突处理</td><td><code>git rebase</code> 解决，不许 <code>-X ours/theirs</code> 一把梭；解决完必须重跑门禁</td></tr>
+</table>
+<h3>7.6 每日同步（异步，各 5 分钟）</h3>
+<p>每天在<b>自己的 Issue 下</b>留一条进度评论（不要发在群里，信息会淹）：</p>
+<pre>
+进展：做了什么（带证据路径）
+计划：下一步做什么
+卡点：卡在哪 / 需要谁配合（没有就写&quot;无&quot;）
+</pre>
+<p>---</p>
+<h2>8. 验收与合并</h2>
+<p><b>验收人</b>：项目负责人（可让我代跑）。流程：</p>
+<li>提交 PR（描述里写清&quot;怎么验证&quot;，并填 AI 参与度）</li>
+<li>自动门禁绿 → 我方逐条跑 Issue 里的验收标准 → <b>逐条给&quot;通过/不通过 + 证据&quot;</b></li>
+<li>全通过才合并（Squash）；不通过<b>打回并写明原因</b>（哪一条没过、期望什么）</li>
+<p><b>打回的标准写法</b>（对事不对人）：</p>
+<pre>
+验收不通过：&lt;编号&gt; &lt;验收条目&gt;
+实际：&lt;命令 + 输出&gt;
+期望：&lt;Issue 里写的标准&gt;
+建议：&lt;具体怎么改&gt;
+</pre>
+<p>---</p>
+<h2>9. 卡点上报格式（谁都能看懂）</h2>
+<pre>
+【卡点】&lt;Issue 编号&gt; &lt;一句话&gt;
+现象：&lt;可复现命令 + 原始报错&gt;
+已排查：&lt;试过什么、排除了什么&gt;
+怀疑：&lt;你的判断，可以是错的&gt;
+需要：&lt;谁的什么决定 / 什么权限 / 什么信息&gt;
+</pre>
+<p>---</p>
+<h2>10. 提交前自查清单（贴在显示器上）</h2>
+<li>[ ] <code>bash ops/gate.sh</code> → <code>GATE: ALL_PASS</code></li>
+<li>[ ] 关联了 Issue（<code>Closes #N</code>），分支名合规</li>
+<li>[ ] 有新测试，<b>且至少一条反例</b></li>
+<li>[ ] 没碰冻结资产；没改 CI / 门禁规则</li>
+<li>[ ] 没有密钥进入提交（<code>git diff --cached | grep -i &quot;sk-\|token\|password&quot;</code> 为空）</li>
+<li>[ ] PR 描述含&quot;怎么验证&quot;＋ AI 参与度</li>
+<li>[ ] 边界确认：只改了 Issue 范围内的东西</li>
+<li>[ ] 中文相关改动<b>有中文用例</b>（标识符 / 动作名 / 提示语）</li>
+<p>---</p>
+<h2>11. 与既有文档的关系</h2>
+<table>
+<tr><th>文档</th><th>管什么</th></tr>
+<tr><td>本文件</td><td><b>两个人（和他们的 AI）怎么一起写代码</b></td></tr>
+<tr><td><code>CONTRIBUTING.md</code></td><td>入口与工作流（最短路径）</td></tr>
+<tr><td>《协作者验证包 v1》</td><td>具体任务怎么上手、每条任务的验收标准</td></tr>
+<tr><td>《v2 项目规划 v1》</td><td>做什么、分几个里程碑、每个工作项的边界</td></tr>
+<tr><td><code>docs/adr/</code></td><td>已定架构决策（改它要走 Issue）</td></tr>
+<tr><td><code>_AI_PROMPT_CARDS.md</code>（同目录）</td><td>可直接复制给 AI 的提示词</td></tr>
+</table></body></html>

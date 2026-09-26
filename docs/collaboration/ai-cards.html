@@ -1,0 +1,42 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>AI 提示词卡片</title><style>body{font:12.5px/1.65 -apple-system,"Microsoft YaHei",sans-serif;max-width:940px;margin:0 auto;padding:22px 26px;color:#111}h1{font-size:19px}h2{font-size:15px;margin-top:20px;border-left:3px solid #4f46e5;padding-left:9px}h3{font-size:13.5px;margin-top:14px}table{border-collapse:collapse;width:100%;margin:6px 0;font-size:11px}th,td{border:1px solid #ccc;padding:4px 6px;vertical-align:top}th{background:#f4f5f7}code{background:#f2f3f6;padding:1px 4px;border-radius:4px;font-size:10.5px}pre{background:#f7f8fa;border:1px solid #e6e8ec;border-radius:6px;padding:8px;font-size:10.5px;white-space:pre-wrap}blockquote{border-left:3px solid #ddd;margin:6px 0;padding-left:10px;color:#555}li{margin-left:16px}</style></head><body><h1>AI 提示词卡片（直接复制给你的 AI 用）</h1>
+<blockquote> 目的：让 AI 的产出<b>可被复跑验证</b>，且<b>不越界</b>。四张卡对应四个时点。</blockquote>
+<p>---</p>
+<h2>卡 1 · 开工前（先复述，别动手）</h2>
+<pre>
+你要在 data-intelligence-platform 仓库完成 GitHub Issue #&lt;编号&gt;。
+动手前先做三件事，不要写代码：
+1. 读 CONTRIBUTING.md、docs/collaboration/2026-09-26-开发规范与AI协作.md、该 Issue、以及涉及的 ADR
+2. 用三句话复述：要做什么 / 边界在哪（Issue 里&quot;不要做什么&quot;）/ 验收标准是什么
+3. 列出你打算新建或修改的文件清单
+复述错了我会纠正；确认后再动手。
+</pre>
+<h2>卡 2 · 实现中（防扩范围、防偷偷改规则）</h2>
+<pre>
+约束：
+- 只改与 Issue 直接相关的文件；发现别的问题请单独报告，不要顺手改
+- 不许修改：CI 工作流、ops/gate.sh、tests/test_layering.py、冻结资产（内核 / lineage-client / dip-contracts / dip-pg）
+- 不许为了让测试变绿而修改测试断言或门禁规则
+- 不许把密钥写进任何文件（本地用 .env）
+- 遇到不确定的设计选择，停下来问我，不要自行决定架构
+</pre>
+<h2>卡 3 · 交活前（证据三件套）</h2>
+<pre>
+交付前你必须给出：
+1. 命令 + 原始输出（关键行不要截断），至少包含 `bash ops/gate.sh` 的最终结果
+2. 测试文件路径 + 通过输出，**其中至少一条是反例**（该被拒绝/该失败的）
+3. 边界声明：明确列出&quot;我按边界没有做 X&quot;
+4. 中文相关改动必须附中文用例（标识符/动作名/提示语）
+如果某一步你没跑过，就直接说没跑过 —— 说&quot;应该可以&quot;不算交付。
+</pre>
+<h2>卡 4 · 遇到卡点 / 审 PR</h2>
+<p>卡点（让 AI 给可复现的信息）：</p>
+<pre>
+按这个格式报告卡点，不要只说&quot;不行&quot;：
+【卡点】现象：&lt;可复现命令 + 原始报错&gt; / 已排查：&lt;试过什么、排除了什么&gt; / 怀疑：&lt;你的判断&gt; / 需要：&lt;谁的什么决定&gt;
+</pre>
+<p>审别人的 AI 产出的 PR：</p>
+<pre>
+逐条检查这个 PR：① 是否只改了 Issue 范围内 ② 验收标准每条是否有证据 ③ 是否有反例测试
+④ 是否碰了 CI/门禁/冻结资产 ⑤ 有没有密钥 ⑥ 中文用例是否覆盖
+然后回答：如果让我复跑，哪些命令能得出同样结果？
+</pre></body></html>
