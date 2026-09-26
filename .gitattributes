@@ -1,0 +1,15 @@
+# 统一换行：文本文件在仓库与工作区都用 LF。
+#
+# 背景（Issue #22）：Git for Windows 默认 core.autocrlf=true，会在检出时把
+# 文本文件转成 CRLF。仓库根若没有 .gitattributes 覆盖它，ops/*.sh 到了
+# Windows 工作区就变 CRLF，在 WSL 里执行会报：
+#     ops/gate.sh: line 3: set: pipefail
+#     : invalid option name
+#     ops/gate.sh: line 4: cd: $'ops/..\r': No such file or directory
+# 用 eol=lf 显式钉死，行为不再取决于每个人本地的 git 配置。
+* text=auto eol=lf
+
+# 二进制文件显式声明，避免被当成文本做换行转换。
+*.pdf  binary
+*.png  binary
+*.docx binary
