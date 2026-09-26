@@ -18,11 +18,14 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import logging
 import pathlib
 from dataclasses import dataclass
 from enum import Enum
 
 import yaml
+
+logger = logging.getLogger("firewall.policy")
 
 
 class Tier(str, Enum):
@@ -195,13 +198,16 @@ class Policy:
     rules: tuple[Rule, ...]
     version: int = 1
     source: str = ""
+    #: 内容指纹（sha256 前 12 位）。判定日志与接口都带它 —— 事后能回答"当时用的是哪一版策略"。
+    digest: str = ""
 
     @classmethod
     def load(cls, path: str | pathlib.Path) -> Policy:
         """从 YAML 读策略表。任何结构性错误都抛 `PolicyError`（fail-closed：宁可起不来）。"""
         location = pathlib.Path(path)
         try:
-            raw = yaml.safe_load(location.read_text(encoding="utf-8"))
+            text = location.read_text(encoding="utf-8")
+            raw = yaml.safe_load(text)
         except FileNotFoundError as exc:
             raise PolicyError(f"策略表不存在：{location}") from exc
         except yaml.YAMLError as exc:
@@ -248,7 +254,13 @@ class Policy:
         version = raw.get("version", 1)
         if not isinstance(version, int):
             raise PolicyError("`version` 必须是整数")
-        return cls(default_tier=default_tier, rules=tuple(rules), version=version, source=str(location))
+        return cls(
+            default_tier=default_tier,
+            rules=tuple(rules),
+            version=version,
+            source=str(location),
+            digest=hashlib.sha256(text.encode("utf-8")).hexdigest()[:12],
+        )
 
     def judge(
         self,
@@ -268,6 +280,17 @@ class Policy:
         fingerprint = action_fingerprint(action=action, target=target, sql=sql)
 
         if not hits:
+            # 「未命中」必须在日志里写明 —— 否则它和"命中了策略"在事后完全分不出来：
+            # 响应里的 matched=false 随请求一起消失了，日志是唯一的长期记录（M2-05）。
+            logger.warning(
+                "判定未命中任何策略规则，按 default_tier=%s 处理（fail-closed：拿不准不放松）"
+                "｜actor=%s｜action=%s｜target=%s｜policy_digest=%s",
+                self.default_tier.value,
+                actor or "(空)",
+                action,
+                target or "(空)",
+                self.digest or "(未计算)",
+            )
             return Verdict(
                 tier=self.default_tier,
                 disposition=DISPOSITION[self.default_tier],
