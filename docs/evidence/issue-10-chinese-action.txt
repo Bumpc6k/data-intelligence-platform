@@ -1,0 +1,47 @@
+Issue #10（M2-04 中文动作名策略用例）验收证据
+================================================
+
+验证日期：2026-09-26
+被测分支：feat/m2-04-chinese-action（基于 feat/m2-05-default-tier；堆叠 PR，见 PR 说明）
+环境：WSL Ubuntu-22.04（Python 3.10.12）
+服务：apps/firewall http://127.0.0.1:18210
+
+本文件是一条脚本的真实输出（原样粘贴，未编辑）：
+  脚本：bash /mnt/d/Projects/_fw-cn-demo.sh
+
+本 Issue 的验收是「**中文动作必须命中策略，不得落到默认档**」。危险之处在于"落到默认档"
+**看起来完全正确**：default_tier 也是 approval，档位一模一样，只看 tier 永远发现不了。
+所以证据的核心是第 1 节与第 2 节的对比 —— 同一个动作、同一个档位，`matched` 不同：
+
+  没写中文规则那条时：tier=approval  matched=False  rules=[]        ← 掉进默认档（静默失效）
+  写了之后：        tier=approval  matched=True   rules=[production-release-cn]
+
+第 3 节验通配覆盖变体（动作名会带宾语）；第 4 节是反例：**不是"只要是中文就命中"**，
+没写进策略的中文动作仍然如实算未命中；第 5 节显示那次未命中被写进了服务日志
+（用的是 M2-05 的机制），事后查得到。
+
+================================================================================
+
+=== 0) 造一份「没有中文规则」的策略表（只删掉 production-release-cn 这条）===
+  原策略表规则： ['destructive-ddl', 'read-only', 'production-write', 'production-release-cn']
+  去掉后规则：   ['destructive-ddl', 'read-only', 'production-write']
+
+=== 1) 用「没有中文规则」的策略表起服务，判中文动作 ===
+  tier=approval  matched=False  rules=[]
+  reason=未命中任何策略规则，按 default_tier=approval 处理（fail-closed：拿不准不放松）
+  ↑ 档位看起来完全正确（approval），但 matched=false —— 这是掉进了 default_tier，不是命中策略
+
+=== 2) 换回正式策略表，判同一个动作 ===
+  tier=approval  matched=True  rules=['production-release-cn']
+  reason=production-release-cn(approval)：生产上线动作（中文动作名）必须走审批，且必须**命中**策略而不是落到默认档
+  ↑ 同样是 approval，但 matched=true 且能指到具体规则 —— 这才是「命中」
+
+=== 3) 变体也被通配覆盖（动作名会带宾语）===
+  上线工作流到预发 → matched=True rules=['production-release-cn']
+  上线工作流到测试环境 → matched=True rules=['production-release-cn']
+
+=== 4) 反例：不是「只要是中文就命中」===
+  修改调度依赖   → tier=approval matched=False reason=未命中任何策略规则，按 default_tier=approval 处理（fail-closed：拿不准不放松）
+
+=== 5) 服务日志：未命中的那次有没有被写下来（M2-05 的机制在这里也用上了）===
+判定未命中任何策略规则，按 default_tier=approval 处理（fail-closed：拿不准不放松）｜actor=么慌｜action=修改调度依赖｜target=(空)｜policy_digest=be734a993ada    

@@ -26,7 +26,21 @@ def test_health_reports_the_effective_policy(client: TestClient):
     assert body["status"] == "ok"
     assert body["default_tier"] == "approval"
     assert len(body["policy_digest"]) == 12
-    assert {rule["name"] for rule in body["rules"]} == {"destructive-ddl", "read-only", "production-write"}
+    assert {rule["name"] for rule in body["rules"]} == {
+        "destructive-ddl",
+        "read-only",
+        "production-write",
+        "production-release-cn",
+    }
+
+
+def test_chinese_action_hits_the_policy_over_http(client: TestClient):
+    """M2-04 走接口再验一遍：中文动作命中策略，`matched=true`（不是默认档）。"""
+    body = client.post("/judge", json={"actor": "么慌", "action": "上线工作流到生产"}).json()
+    assert body["tier"] == "approval"
+    assert body["matched"] is True, "中文动作必须命中策略，不能掉进默认档"
+    assert body["matched_rules"] == ["production-release-cn"]
+    assert body["requires_token"] is True
 
 
 @pytest.mark.parametrize(
