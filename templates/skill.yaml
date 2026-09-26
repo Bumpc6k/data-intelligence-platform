@@ -1,0 +1,52 @@
+# skill 契约声明模板（M1-02 / Issue #1）
+#
+# 用法：复制本文件作为新 skill 的声明，逐项改成自己的值 —— 本模板**不含占位符**，
+# 复制即用：改完就能被 dip_skills.spec.load_skill_spec() 直接读入。
+#
+# 字段口径（9 类字段）见《架构讨论：Harness + 插件化》§3。
+# 自检：
+#   python -c "from dip_skills import load_skill_spec; print(load_skill_spec('templates/skill.yaml'))"
+
+# 1. 唯一名 + 版本（合起来形如 lineage.analyze@1）
+#    name    小写字母开头，只含 [a-z0-9_.]，最长 64
+#    version 整数，1 ≤ version ≤ 本实现支持的上限（见 spec.MAX_SUPPORTED_VERSION）
+name: demo.echo
+version: 1
+
+# 2. 什么时候用 —— 写给决策模型看的描述（不是给人看的文档），最长 500 字
+when: 用户要求原样回显一段文本，用于验证调用链是否打通
+
+# 3. 入参 / 出参 JSON Schema（都要求非空映射）
+input_schema:
+  type: object
+  properties:
+    text:
+      type: string
+  required: [text]
+output_schema:
+  type: object
+  properties:
+    echoed:
+      type: string
+  required: [echoed]
+
+# 4. 副作用种类：none / read / write / ddl / dml —— 它决定防火墙要求的最低档位
+side_effect: read
+
+# 5. 需要的权限点（至少一个），如 lineage:read、schedule:write
+auth_scope:
+  - demo:read
+
+# 6. 幂等 / 超时（秒，1~600）/ 重试语义（none / connect_only）
+idempotent: true
+timeout: 30
+retry: connect_only
+
+# 7. 返回值能作为哪类证据：lineage / metric / report / plan
+evidence_kind: report
+
+# 8. 结果用哪个视图渲染：table / graph / sql / diff
+renderer: table
+
+# 9. 单次会话内的调用上限（防循环），1~64；§3 举的例子是 6
+budget: 6

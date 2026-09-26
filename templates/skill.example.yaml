@@ -1,0 +1,32 @@
+# 样例：把内核的血缘解析包成 skill 的契约声明
+# （对应《架构讨论》§3 表格里的例子 lineage.analyze@1；M1-03 按它实现 MCP 服务）
+name: lineage.analyze
+version: 1
+when: 用户给了 SQL、或问某张表/某个字段是怎么来的（血缘、上游、影响面、口径）
+input_schema:
+  type: object
+  properties:
+    sql:
+      type: string
+    dialect:
+      type: string
+    depth:
+      type: integer
+  required: [sql]
+output_schema:
+  type: object
+  properties:
+    graph:
+      type: object
+    evidence:
+      type: array
+  required: [graph]
+side_effect: read
+auth_scope:
+  - lineage:read
+idempotent: true
+timeout: 30
+retry: connect_only
+evidence_kind: lineage
+renderer: graph
+budget: 6

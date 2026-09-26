@@ -20,6 +20,7 @@ PKG_DIRS = {
     "dip_contracts": ROOT / "packages/dip-contracts/src/dip_contracts",
     "dip_core": ROOT / "packages/dip-core/src/dip_core",
     "dip_agent": ROOT / "packages/dip-agent/src/dip_agent",
+    "dip_skills": ROOT / "packages/dip-skills/src/dip_skills",
     "lineage_client": ROOT / "integrations/lineage-client/src/lineage_client",
     "portal_api": ROOT / "apps/portal-api/src/portal_api",
 }
@@ -27,6 +28,7 @@ PKG_DIRS = {
 ALLOWED: dict[str, set[str]] = {
     "dip_contracts": set(),
     "dip_core": set(),
+    "dip_skills": set(),                          # 声明层：不依赖任何其它单元（标准库 + pydantic + YAML）
     "lineage_client": {"dip_contracts"},          # 适配器实现契约层的 KernelToolkit 协议
     "dip_agent": {"dip_contracts", "dip_core"},   # 只依赖协议，不依赖 httpx 适配器
     "portal_api": {"dip_contracts", "dip_core", "dip_agent", "lineage_client"},
@@ -67,3 +69,24 @@ def test_contracts_layer_stays_pure():
         unknown = {i for i in first_party_imports(py) if i not in allowed and not i.startswith("_")}
         third_party = {i for i in unknown if i in {"httpx", "fastapi", "uvicorn", "requests"}}
         assert not third_party, f"{py.relative_to(ROOT)} 引入了重量级依赖 {third_party}（契约层必须保持纯净）"
+
+
+def test_skills_layer_stays_pure():
+    """skill 契约声明层只允许 标准库 + pydantic + YAML——解析一份声明不该拖进运行时依赖。"""
+    allowed = {
+        "dip_skills",
+        "__future__",
+        "enum",
+        "typing",
+        "pathlib",
+        "collections",
+        "dataclasses",
+        "re",
+        "pydantic",
+        "yaml",
+    }
+    for py in sorted(PKG_DIRS["dip_skills"].rglob("*.py")):
+        unknown = {i for i in first_party_imports(py) if i not in allowed and not i.startswith("_")}
+        heavy = {i for i in unknown if i in {"httpx", "fastapi", "uvicorn", "requests", "psycopg", "sqlalchemy"}}
+        assert not heavy, f"{py.relative_to(ROOT)} 引入了重量级依赖 {heavy}（skill 契约层必须保持纯净）"
+        assert unknown <= allowed, f"{py.relative_to(ROOT)} 引入了 {unknown - allowed}（该层只允许 {sorted(allowed)}）"
