@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
+import re
 
 import pytest
 from firewall.policy import (
@@ -219,7 +220,54 @@ def test_shipped_policy_declares_its_default_tier_explicitly(policy: Policy):
     text = SHIPPED.read_text(encoding="utf-8")
     assert "default_tier:" in text
     assert policy.default_tier is Tier.APPROVAL
-    assert {rule.name for rule in policy.rules} == {"destructive-ddl", "read-only", "production-write"}
+    assert {rule.name for rule in policy.rules} == {
+        "destructive-ddl",
+        "read-only",
+        "production-write",
+        "production-release-cn",
+    }
+
+
+def test_shipped_policy_contains_at_least_one_chinese_action(policy: Policy):
+    """M2-04 的交付物：策略表至少要有一条**中文动作**规则。"""
+    chinese = [
+        rule.name for rule in policy.rules if any(re.search(r"[\u4e00-\u9fff]", action) for action in rule.actions)
+    ]
+    assert chinese, "策略表里没有一条中文动作规则"
+
+
+def test_chinese_action_must_hit_the_policy_not_the_default_tier(policy: Policy):
+    """M2-04 验收：中文动作**必须命中策略**，不得落到默认档。
+
+    危险之处在于"落到默认档"**看起来是对的**：default_tier 也是 approval，档位一模一样，
+    调用方只看 tier 根本发现不了。所以这里断言的不是档位，而是 `matched` 与命中的规则名 ——
+    档位相同，含义相反。
+    """
+    verdict = policy.judge(actor="么慌", action="上线工作流到生产")
+    assert verdict.tier is Tier.APPROVAL
+    assert verdict.matched is True, "中文动作掉进默认档了：档位看着对，但那是静默失效"
+    assert verdict.matched_rules == ("production-release-cn",)
+    assert "未命中" not in verdict.reason
+
+
+@pytest.mark.parametrize("action", ["上线工作流到预发", "上线工作流到测试环境", "上线工作流到备份库"])
+def test_chinese_action_variants_are_covered_by_the_glob(policy: Policy, action: str):
+    """用通配而不是精确写死：动作名会带宾语，只写 '上线工作流到生产' 会漏掉变体。"""
+    verdict = policy.judge(actor="么慌", action=action)
+    assert verdict.matched is True, f"{action} 应当被通配规则覆盖"
+    assert verdict.matched_rules == ("production-release-cn",)
+
+
+def test_unrelated_chinese_action_honestly_falls_to_the_default_tier(policy: Policy):
+    """反例：不是"只要是中文就命中"。
+
+    没写进策略的中文动作仍然算未命中（会进日志、`matched=false`）——
+    不能让"中文能匹配"变成"中文一律放行/一律命中"的错觉。
+    """
+    verdict = policy.judge(actor="么慌", action="修改调度依赖")
+    assert verdict.matched is False
+    assert verdict.matched_rules == ()
+    assert "未命中" in verdict.reason
 
 
 # ---------------------------------------------------------------- 动作指纹
