@@ -1,0 +1,164 @@
+Issue #5（M1-05 出口事实校验器）验收证据
+=========================================
+
+验证日期：2026-09-26
+被测分支：feat/m1-05-fact-guard（基于 main 3dcf530）
+环境：WSL Ubuntu-22.04（Python 3.10.12）
+内核：真实服务 http://127.0.0.1:18080
+
+
+改动范围（冻结资产相关）
+------------------------
+**只新增 `packages/dip-contracts/src/dip_contracts/guards.py` 一个文件**，
+`dip-contracts` 里既有文件（`__init__.py` / `kernel.py` / `models.py` / `status.py`）**字节未变**。
+刻意不做 re-export（消费方写 `from dip_contracts.guards import …`），以保持"冻结"语义。
+
+$ git diff --stat main...HEAD
+ packages/dip-contracts/src/dip_contracts/guards.py | (新增)
+ tests/test_guards.py                               | (新增)
+ docs/evidence/issue-5-guards.txt                   | (本文件)
+
+契约层纯净性由既有门禁自动管住（它会 rglob 该目录下所有 .py）：
+
+$ .venv/bin/python -m pytest tests/test_layering.py -q
+4 passed
+
+
+测试规模
+--------
+本项基线（main）：107 passed, 5 skipped
+本项完成：
+
+$ .venv/bin/python -m pytest --tb=no -p no:warnings | tail -1
+132 passed, 3 skipped in 2.59s
+
+$ .venv/bin/python -m pytest tests/test_guards.py --tb=no -p no:warnings | tail -1
+23 passed in 0.43s
+
+（skip 从 5 条降到 3 条：内核本轮在跑，两条原本因"内核服务未运行"跳过的 live 冒烟真的跑了。）
+
+
+验收：3 正例 + 3 反例
+=====================
+$ .venv/bin/python -m pytest tests/test_guards.py -q
+23 passed
+
+正例（应当通过）
+  test_positive_1_everything_traces_to_the_receipt
+      表名 / 字段名 / 数字全部来自回执 → ok=True，checked=5
+  test_positive_2_no_verifiable_fact_at_all
+      文本里没有任何可验证事实 → ok=True，checked=0
+  test_positive_3_thousands_separator_and_percent_free_text
+      千分位写法与白名单口径一致（白名单用 normalize_number 建）→ ok=True
+
+反例（必须被拦）
+  test_negative_1_fabricated_table_is_blocked
+      "ads.ads_产量月报"      → kind=table，reason 含"编造表名 ads.ads_产量月报"
+  test_negative_2_fabricated_field_is_blocked
+      "sales_amount"         → kind=field，reason 含"编造字段 sales_amount"
+  test_negative_3_fabricated_number_is_blocked
+      "9527"                 → kind=number，并带 normalized="9527"
+
+
+中文标识符（Issue 点名的那条）
+==============================
+$ .venv/bin/python -m pytest tests/test_guards.py -q -k chinese or ascii
+  test_chinese_table_name_is_not_misread               通过：中文表名被完整读出
+  test_fabricated_chinese_table_is_blocked             通过：编造中文表名"ads.ads_编造月报"被拦
+  test_ascii_only_table_regex_breaks_on_chinese_identifiers  通过
+
+第三条是**实测的对照实验**：ASCII 正则 ([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_]*) 在
+「ads.ads_产销存月报 上游共 9 张表」上得到的是 'ads.ads_' —— 不在白名单里，
+于是**合法答案被误拦（假红）**。假红不比漏检轻：为了让测试变绿，人会去放宽规则，
+最后连编造也放行。本实现用 Unicode 感知的表名规则，所以不会走到那一步。
+
+
+真实数据验证（对真实内核，不是纸上推演）
+========================================
+命令：.venv/bin/python /mnt/d/Projects/_e2e_m1_05.py
+白名单来源：表名/数字 ← 真实内核 POST /upstream；字段名 ← 录制的真实响应 fixture
+
+$ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/health
+200
+
+=== 白名单来源（真实数据）===
+{
+  "上游端点": "POST /upstream",
+  "耗时ms": 5,
+  "upstream_count": 14,
+  "edge_count": 18,
+  "白名单表数": 15,
+  "白名单字段数": 11,
+  "白名单数字": ["13", "14", "18"]
+}
+涉及的表（前 6）：['ads.ads_产销存月报', 'cdw.dwd_卷烟产量明细', 'cdw.dwd_卷烟销量明细',
+                   'cdw.dwd_成品库存明细', 'cdw.dws_产量汇总', 'cdw.dws_产销存汇总']
+字段（前 6）：['brand_code', 'brand_name', 'output_qty', 'plant_code', 'plant_name', 'price_band']
+
+--- 正例：全部来自回执 ---
+文本：ads.ads_产销存月报 的 output_qty 来自 cdw.dws_产销存汇总，上游共 14 张表、18 条边。
+结论：ok=True  checked=5
+说明：通过：5 项事实均来自回执
+
+--- 反例：模型编造（表名 / 字段 / 数字）---
+文本：ads.ads_产销存月报 的 output_qty 来自 ads.ads_产量月报（这个表不存在），
+      字段 sales_amount 的系数是 9527，上游共 14 张表。
+结论：ok=False  checked=6
+说明：拦截：编造表名 ads.ads_产量月报；编造字段 sales_amount；编造数字 9527（归一化 9527）
+逐条 violations：
+  - kind=table  token='ads.ads_产量月报'
+  - kind=field  token='sales_amount'
+  - kind=number token='9527' normalized='9527'
+
+--- 序列化结果（外壳真正拿到的东西）---
+{
+  "violations": [
+    {"kind": "table",  "token": "ads.ads_产量月报", "normalized": null},
+    {"kind": "field",  "token": "sales_amount",     "normalized": null},
+    {"kind": "number", "token": "9527",             "normalized": "9527"}
+  ],
+  "checked": 6,
+  "ok": false
+}
+
+
+实现过程中发现并修掉的缺陷（自报）
+==================================
+**真 ASCII 表名会被字段规则重复判一次（假红）**。
+第一版实现里，字段扫描直接在原文上跑，于是合法答案里的 `dim.dim_brand`
+（**真实内核里就有的表名**）会被 FIELD_RE 再匹配出 `dim_brand`，报成"编造字段 dim_brand"。
+而 `dim.dim_brand` 明明是白名单里正儿八经的表 —— 合法答案被误拦。
+
+修法：扫字段前先遮掉已识别的表名 span（扫数字前也同理遮掉字段与标识符串）。
+回归测试：tests/test_guards.py::test_real_ascii_table_does_not_trigger_field_violation
+          tests/test_guards.py::test_digits_inside_identifiers_are_not_number_claims
+
+
+三个刻意的"不误伤"设计（都有测试）
+==================================
+1. `v1.2` 不算表名 —— 表名要求点号后至少有一个非数字字符；
+2. 标识符内部的数字不算数字断言 —— 否则 `t_2026_01` 会被误报"编造数字 2026"；
+3. 表名的一部分不算字段 —— 见上一条自报缺陷。
+
+
+边界声明（按 Issue 的「不要做」）
+================================
+- **不依赖具体模型实现**：本模块是纯函数，入参只有「文本 + 白名单」，不发请求、不读文件；
+  测试里没有任何模型或网络调用。
+- **不重复实现 status 推导**：本模块不产出 `Status`；`verified/inferred/candidate` 那套判定
+  仍在 `dip_contracts/status.py`（未改动）。
+- **不自建白名单**：白名单是调用方的入参（Issue 的接口就是这样定义的）；
+  本项只提供 `normalize_number` 供调用方复用，保证两侧口径一致。
+  **本项没有实现"从技能结果生成白名单"** —— 那是消费方（M1-06 / 编排层）的事，属本项边界之外。
+
+
+门禁
+====
+$ bash ops/gate.sh
+== lint（ruff）
+All checks passed!
+   ✅ PASS
+== 测试（pytest）
+   ✅ PASS
+
+GATE: ALL_PASS
