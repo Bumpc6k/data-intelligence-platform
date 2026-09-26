@@ -1,0 +1,20 @@
+# 采集时间: 2026-09-26 17:47:48 CST | 环境: Ubuntu 24.04.5 LTS | 主机: WSL2 (Windows 11)
+
+$ export DEEPSEEK_BASE_URL=https://api.deepseek.com  (必须 export；见 04)
+$ dsh --profile headless "reply with the single word PONG"
+PONG
+exit=0
+
+$ dsh --profile headless "只回答数字：1 加 1 等于几？"   # 中文入参，验证 UTF-8 链路
+dsh: reasoning:
+The user asks a simple arithmetic question: "只回答数字：1 加 1 等于几？" (Only answer the number: what is 1 plus 1?)
+
+The workspace instructions are relevant but this is a trivial question, not a coding task. The answer is 2. Only answer the number as requested.
+
+I should just reply "2".
+
+The system reminder about evidence doesn't really apply here—it's a general instruction for repo conclusions. But the user explicitly asks for only a number. Answer: 2.
+2
+exit=0
+
+# 结论：一问一答成立（英文 PONG / 中文 2），中文未出现乱码。

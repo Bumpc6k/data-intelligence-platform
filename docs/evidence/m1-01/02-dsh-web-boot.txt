@@ -1,0 +1,21 @@
+# 采集时间: 2026-09-26 17:48:03 CST | 环境: Ubuntu 24.04.5 LTS (WSL2 on Windows 11)
+
+$ dsh web --no-open --port 3080 --host 127.0.0.1
+启动行（token 已脱敏；实际每次启动随机生成）：
+dsh web: http://127.0.0.1:3080/?token=<REDACTED>
+
+$ ss -ltnp | grep 3080
+LISTEN 0      511         127.0.0.1:3080      0.0.0.0:*    users:(("MainThread",pid=582,fd=22))     
+
+$ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3080/            # 不带 token
+   -> HTTP 401
+
+$ curl -s -c cj -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3080/?token=<REDACTED>'   # 带 token（首次）
+   -> HTTP 303（303 + 下发信任 cookie，浏览器会自动跟过去）
+
+$ curl -s -b cj -o idx.html -w '%{http_code}' http://127.0.0.1:3080/               # 带 cookie 再访问
+   -> HTTP 200，响应 27724 字节
+   <title>DeepSeek Harness</title>
+
+# 要点：裸 / 返回 401 是浏览器信任栅栏（设计如此，不是启动失败）；
+#       正确姿势是启动行打印的整条 ?token=... URL —— 首次 303 并下发 cookie，之后 / 返回 200。

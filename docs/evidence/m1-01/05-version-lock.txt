@@ -1,0 +1,42 @@
+# 采集时间: 2026-09-26 17:49:58 CST | 环境: Ubuntu 24.04.5 LTS (WSL2)
+
+$ cat ops/dsh/package.json
+{
+  "name": "dip-dsh-pin",
+  "private": true,
+  "description": "DeepSeek Harness (dsh) 版本锁定清单：只锁版本，不做打包。用法见 docs/collaboration/notes/dsh-setup.md",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.5-rc.3"
+  }
+}
+$ cat ops/dsh/.npmrc
+registry=https://registry.npmmirror.com
+
+$ npm ci   # 严格按 package-lock.json 安装
+npm warn install-scripts   protobufjs@7.6.6 (postinstall: node scripts/postinstall)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+
+$ ./node_modules/.bin/dsh --version
+0.1.5-rc.3
+exit=0
+
+$ npm ls @deepseek-ai/dsh
+dip-dsh-pin@ /mnt/f/work/data-intelligence-platform/ops/dsh
+└── @deepseek-ai/dsh@0.1.5-rc.3
+
+
+$ du -sh node_modules
+249M	node_modules
+
+$ grep -A2 从 lock 里取 dsh 的版本
+    "node_modules/@deepseek-ai/dsh": {
+      "version": "0.1.5-rc.3",
+      "resolved": "https://registry.npmmirror.com/@deepseek-ai/dsh/-/dsh-0.1.5-rc.3.tgz",
+
+$ lock 文件规模
+  "lockfileVersion": 3,
+带 resolved 的条目数: 584
+
+# 结论：ops/dsh（精确版本 + lockfileVersion 3 + .npmrc 指镜像）可装出与全局安装一致的 dsh 0.1.5-rc.3；
+#       整棵依赖树（584 条 resolved 记录）由 lock 固定，不追 latest。

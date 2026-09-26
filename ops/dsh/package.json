@@ -1,0 +1,8 @@
+{
+  "name": "dip-dsh-pin",
+  "private": true,
+  "description": "DeepSeek Harness (dsh) 版本锁定清单：只锁版本，不做打包。用法见 docs/collaboration/notes/dsh-setup.md",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.5-rc.3"
+  }
+}
