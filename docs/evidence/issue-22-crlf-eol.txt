@@ -1,0 +1,102 @@
+Issue #22 验收证据 —— 仓库缺 .gitattributes 导致 Windows 检出 CRLF
+================================================================
+
+验证日期：2026-09-26
+被测提交：459c09197e4d72ff25077bf5d0e77d78190631c9
+（分支 fix/22-gitattributes-eol-lf，仅新增仓库根 .gitattributes）
+
+环境
+----
+Windows 11 + Git for Windows 2.55.0.3
+  系统级 core.autocrlf = file:C:/Program Files/Git/etc/gitconfig  true   ← Git for Windows 默认
+服务与门禁在 WSL Ubuntu-22.04 内执行（Python 3.10.12，.venv 由 make venv 建）
+
+关键事实：提交进 git 的 blob 本来就是 LF
+----------------------------------------
+$ git ls-files --eol | awk '{print $1}' | sort | uniq -c
+      7 i/-text
+     76 i/lf
+      1 i/none
+
+$ git ls-files --eol | awk '$1=="i/crlf"' | wc -l
+0
+（即：CRLF 不是提交进去的，是 autocrlf=true 在检出时加上去的）
+
+
+反例：没有 .gitattributes（= 修复前）
+------------------------------------
+全新克隆，环境模拟 Git for Windows 默认：
+
+$ git config core.autocrlf
+true
+$ test -f .gitattributes && echo 是 || echo 否
+否
+
+$ git ls-files --eol -- ops/gate.sh ops/start-pg.sh Makefile
+i/lf    w/crlf  attr/                 	Makefile
+i/lf    w/crlf  attr/                 	ops/gate.sh
+i/lf    w/crlf  attr/                 	ops/start-pg.sh
+
+在 WSL 里执行门禁 —— 崩：
+
+$ bash ops/gate.sh
+ops/gate.sh: line 3: set: pipefail
+: invalid option name
+ops/gate.sh: line 4: cd: $'ops/..\r': No such file or directory
+ops/gate.sh: line 19: syntax error: unexpected end of file
+
+
+正例：有 .gitattributes（= 修复后）
+-----------------------------------
+全新克隆同一提交，core.autocrlf 仍设为 true：
+
+$ git config core.autocrlf
+true
+$ test -f .gitattributes && echo 是 || echo 否
+是
+
+$ git ls-files --eol -- ops/gate.sh ops/start-pg.sh Makefile
+i/lf    w/lf    attr/text=auto eol=lf 	Makefile
+i/lf    w/lf    attr/text=auto eol=lf 	ops/gate.sh
+i/lf    w/lf    attr/text=auto eol=lf 	ops/start-pg.sh
+
+$ git ls-files --eol | awk '$2=="w/crlf" || $2=="w/mixed"' | wc -l
+0
+
+在 WSL 里执行门禁 —— 绿：
+
+$ bash ops/gate.sh
+== lint（ruff）
+All checks passed!
+   ✅ PASS
+== 测试（pytest）
+................s.....s....................................sss           [100%]
+   ✅ PASS
+
+GATE: ALL_PASS
+
+（注：该测试克隆另建 .venv；venv 本身在 .gitignore 内，与换行行为无关）
+
+
+无副作用：对已提交内容零改写
+----------------------------
+$ git add .gitattributes && git add --renormalize .
+$ git diff --cached --stat
+ .gitattributes | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+$ git ls-files --eol | awk '$1=="i/crlf"' | wc -l
+0
+（renormalize 未产生任何额外改动 → 只改检出行为，不改仓库内容）
+
+
+门禁（本分支）
+--------------
+$ bash ops/gate.sh
+== lint（ruff）
+All checks passed!
+   ✅ PASS
+== 测试（pytest）
+   ✅ PASS
+
+GATE: ALL_PASS
