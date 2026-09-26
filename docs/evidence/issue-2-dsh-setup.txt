@@ -22,6 +22,28 @@ Transfer-Encoding: chunked
 
 → 证实 D2：不认证直接访问拿不到任何东西，必须用启动时打印的带 token 的 URL。
 
+同一条链路的完整验证（第二位执行者本人重跑，非转述）：
+
+$ curl -s -o /dev/null -w "bare=%{http_code}\n" --noproxy '*' http://127.0.0.1:3080/
+bare=401
+
+$ curl -s -L -c cj.txt -b cj.txt -o body.html \
+    -w "authed=%{http_code} type=%{content_type} bytes=%{size_download}\n" \
+    --noproxy '*' "http://127.0.0.1:3080/?token=<启动日志里的 token>"
+authed=200 type=text/html; charset=utf-8 bytes=34239
+
+$ grep -o '<title>[^<]*</title>' body.html
+<title>DSH Local Build</title>
+$ grep -c 'id="root"' body.html
+1
+
+$ grep -o 'dsh-auth-[A-Za-z0-9_-]*' cj.txt | head -1
+dsh-auth-VPhEEcLKeqRDBoBalzN2Nm7CnfxKhLE00pKIDWxt1sw
+
+→ 401（无 token）→ 带 token 访问 → 303 换到 cookie → 跟随重定向 → 200 + 真页面
+  （34239 字节 HTML，标题 DSH Local Build，有挂载点 <div id="root">）。
+  即：**只有带 token 的 URL 能进门，且进门后靠 cookie 维持**。文档 D2 与 §5 的结论成立。
+
 
 二、独立复核：版本与版本锁定（对应文档 §1.1 / §2）
 ----------------------------------------------------
