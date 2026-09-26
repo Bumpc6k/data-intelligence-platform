@@ -29,7 +29,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .policy import Policy, PolicyError
-from .tokens import TokenStore
+from .tokens import TokenStore, ttl_seconds
 
 _DEFAULT_POLICY = pathlib.Path(__file__).parents[2] / "policies" / "default.yaml"
 
@@ -87,7 +87,8 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="数据智能平台 · firewall", version="0.1.0", lifespan=lifespan)
-tokens = TokenStore()
+# 时效从环境读：环境写错就直接抛（ValueError），假装按默认值跑等于把时效悄悄换掉。
+tokens = TokenStore(ttl_seconds=ttl_seconds())
 
 
 class JudgeRequest(BaseModel):
@@ -145,6 +146,8 @@ class HealthResponse(BaseModel):
     policy_path: str
     default_tier: str
     rules: list[dict]
+    token_ttl_seconds: int
+    issued_token_count: int
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])
@@ -157,6 +160,8 @@ def health() -> HealthResponse:
         policy_path=loaded.path,
         default_tier=loaded.policy.default_tier.value,
         rules=[{"name": rule.name, "tier": rule.tier.value} for rule in loaded.policy.rules],
+        token_ttl_seconds=tokens.ttl_seconds,
+        issued_token_count=len(tokens),
     )
 
 
