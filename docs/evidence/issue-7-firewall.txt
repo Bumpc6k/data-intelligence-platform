@@ -1,0 +1,69 @@
+Issue #7（M2-01 防火墙服务）验收证据
+=====================================
+
+验证日期：2026-09-26
+被测分支：feat/m2-01-firewall（基于 main 3dcf530 之后的 main）
+环境：WSL Ubuntu-22.04（Python 3.10.12）
+服务：apps/firewall，独立进程 http://127.0.0.1:18210
+策略表：apps/firewall/policies/default.yaml（指纹 6bfcaadc1263）
+
+本文件是一条脚本的真实输出（原样粘贴，未编辑）：
+  脚本：bash /mnt/d/Projects/_fw-demo.sh
+  覆盖：起服务（用仓库自带 ops/start-firewall.sh）→ /health → 三档各 1 例 →
+        fail-closed → 令牌一次性与绑指纹 → 策略表可改且改动有记录。
+
+关于第 6 节的一点说明：那一节为了验证「改策略表即生效」，**临时**往策略表里加了一条
+中文动作规则（"上线工作流到生产"），验证完立刻还原（`git diff apps/firewall/policies/default.yaml`
+为空）。它顺带证明了中文动作能被 fnmatch 通配正确匹配 —— 但**这不是交付内容**：
+让中文动作**常驻**策略表并配上"不得落到默认档"的断言，是 M2-04（#10）的活。
+
+================================================================================
+
+=== 1) 用仓库自带脚本起服务：bash ops/start-firewall.sh ===
+firewall : http://127.0.0.1:18210/health
+策略表   : /mnt/d/Projects/data-intelligence-platform/apps/firewall/policies/default.yaml
+{"status":"ok","policy_version":1,"policy_digest":"6bfcaadc1263","policy_path":"/mnt/d/Projects/data-intelligence-platform/apps/firewall/policies/default.yaml","default_tier":"approval","rules":[{"name":"destructive-ddl","tier":"deny"},{"name":"read-only","tier":"auto"},{"name":"production-write","tier":"approval"}]}
+
+=== 2) GET /health（策略版本 / 指纹 / 默认档 / 规则）===
+{
+    "status": "ok",
+    "policy_version": 1,
+    "policy_digest": "6bfcaadc1263",
+    "policy_path": "/mnt/d/Projects/data-intelligence-platform/apps/firewall/policies/default.yaml",
+    "default_tier": "approval",
+    "rules": [
+        {
+            "name": "destructive-ddl",
+            "tier": "deny"
+        },
+        {
+            "name": "read-only",
+            "tier": "auto"
+        },
+        {
+            "name": "production-write",
+            "tier": "approval"
+        }
+    ]
+}
+
+=== 3) 验收：三档各 1 例（POST /judge）===
+  select     → tier=auto      disposition=auto_pass         matched=True rules=['read-only'] fp=0a0996857b43fed0
+  insert     → tier=approval  disposition=require_approval  matched=True rules=['production-write'] fp=fd247e24277e19cc
+  truncate   → tier=deny      disposition=reject            matched=True rules=['destructive-ddl'] fp=52180ec56b3b0ff8
+
+=== 4) 验收：fail-closed（拿不准按上一档）===
+  未定义动作 → tier=approval matched=False  reason=未命中任何策略规则，按 default_tier=approval 处理（fail-closed：拿不准不放松）
+
+=== 5) 验收：令牌一次性 + 绑指纹（POST /tokens/issue → /verify）===
+  已签发令牌（长度 43）
+  换一个 SQL 去用（应当 403）→ HTTP 403 {"detail":"令牌与当前动作不匹配（指纹不一致：令牌是给另一个动作签的）"}
+  原样用第一次（应当 200）→ HTTP 200 {"ok":true,"reason":"ok"}
+  同一令牌第二次使用（应当 403）→ HTTP 403 {"detail":"令牌已使用过（一次性，不允许复用；上次使用 actor=么慌）"}
+
+=== 6) 验收：策略表可改且改动有记录（改文件即生效，指纹变化）===
+  改动前指纹 → 6bfcaadc1263 tier= auto
+  已往策略表加一条规则（不改代码、不重启服务）
+  改动后指纹 → 8d182a591095 tier= auto
+  新加的动作是否命中策略（不是走默认档）→ tier=approval matched=True rules=['上线工作流到生产']
+  （已还原策略表）
