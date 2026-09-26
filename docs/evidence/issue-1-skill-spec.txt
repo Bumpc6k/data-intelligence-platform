@@ -1,0 +1,152 @@
+Issue #1（M1-02 skill 契约声明与校验器）验收证据
+=================================================
+
+验证日期：2026-09-26
+被测分支：feat/m1-02-skill-contract
+服务与环境：WSL Ubuntu-22.04（Python 3.10.12，.venv 由 make venv 建）
+
+依据：字段口径来自《架构讨论：Harness + 插件化》§3「Skill 契约（最小字段集）」
+（该文档在内核仓库 docs/platform-vision/2026-09-25-架构讨论-harness与插件化.md）
+
+
+测试规模（基线对比）
+--------------------
+修复前基线：57 passed, 5 skipped
+本次改动后：
+
+$ .venv/bin/python -m pytest --tb=no -p no:warnings | tail -1
+107 passed, 5 skipped in 2.48s
+
+$ .venv/bin/python -m pytest tests/test_skill_spec.py --tb=no -p no:warnings | tail -1
+49 passed in 0.50s
+
+
+验收 ①：缺字段的声明被拒（有测试）
+==================================
+演示脚本（一次性，不入库）逐条真实执行，原始输出如下：
+
+$ .venv/bin/python /mnt/d/Projects/_evidence_demo.py
+
+### 反例 1：缺必填字段 side_effect
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - 缺少必填字段：side_effect
+
+### 反例 2：side_effect 取值越界（readonly）
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - side_effect：取值不在允许集合内，当前 'readonly'（Input should be 'none', 'read', 'write', 'ddl' or 'dml'）
+
+### 反例 3：renderer 取值越界（pie）
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - renderer：取值不在允许集合内，当前 'pie'（Input should be 'table', 'graph', 'sql' or 'diff'）
+
+### 反例 4：when 超长（500 + 1 字）
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - when：文本过长，当前 '长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长…（共 501 字）'（String should have at most 500 characters）
+
+### 反例 5：版本不兼容（version = 2）
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - version：取值过大，当前 2（Input should be less than or equal to 1）
+
+### 反例 6：契约之外的字段（description）
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - description：契约之外的字段（不在 §3 的 9 类字段内）
+
+### 反例 7：auth_scope 为空列表
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - auth_scope：不能为空（List should have at least 1 item after validation, not 0）
+
+### 反例 8：中文 name（血缘.分析）
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - name：格式不合法，当前 '血缘.分析'（String should match pattern '^[a-z][a-z0-9_.]*$'）
+
+### 反例 9：一次改两处（缺字段 + 错枚举）
+    ⛔ 已被拒绝，理由：
+       skill 契约声明不合法：
+       - 缺少必填字段：side_effect
+       - renderer：取值不在允许集合内，当前 'pie'（Input should be 'table', 'graph', 'sql' or 'diff'）
+
+### 反例 10：整份声明不是映射（而是一个列表）
+    ⛔ 已被拒绝： skill 声明必须是映射（key: value），当前是 list
+
+补充：9 类字段的每一个都单独删掉跑过反例（tests/test_skill_spec.py::
+test_every_contract_field_is_required，参数化 13 个字段，不是抽查一个）。
+
+
+验收 ②：模板复制即用
+====================
+$ .venv/bin/python /mnt/d/Projects/_evidence_demo.py  （同上一次执行的对应段落）
+    ✅ templates/skill.yaml → demo.echo@1  (side_effect=read, evidence_kind=report, renderer=table, timeout=30, budget=6)
+    ✅ templates/skill.example.yaml → lineage.analyze@1  (side_effect=read, evidence_kind=lineage, renderer=graph, timeout=30, budget=6)
+
+模板不含占位符，复制即用；仓库内发布的模板与样例由测试断言其自身合法
+（tests/test_skill_spec.py::test_shipped_template_and_example_are_valid）。
+
+
+验收 ③：契约字段与《架构讨论》§3 的 9 类完全一致
+=================================================
+### 输出（同上一次执行的对应段落）
+    §3 的 9 类字段分组（共 9 组）：
+      1. name + version
+      2. when
+      3. input_schema + output_schema
+      4. side_effect
+      5. auth_scope
+      6. idempotent + timeout + retry
+      7. evidence_kind
+      8. renderer
+      9. budget
+    模型字段集 == 9 类字段集：True
+    模型字段（13 个）：('name', 'version', 'when', 'input_schema', 'output_schema', 'side_effect', 'auth_scope', 'idempotent', 'timeout', 'retry', 'evidence_kind', 'renderer', 'budget')
+
+该比对由测试双向强制（`test_contract_fields_match_the_nine_groups`）：字段多一个、少一个都红。
+
+
+正例 + 中文保真
+================
+    ✅ lineage.analyze@1   idempotent=True  retry=connect_only
+    中文 when 原样保真：True
+    → 用户问「ads.ads_产销存月报 的产量怎么来的？」时使用
+
+
+依赖修复实证：PyYAML 不再是"未声明依赖"
+========================================
+改动前：`pyproject.toml` 从未声明 yaml，PyYAML 6.0.3 仅由 uvicorn[standard] 的 extra 间接带入：
+
+$ .venv/bin/python -c "import importlib.metadata as m; print([r for r in m.requires('uvicorn') if 'yaml' in r])"
+["pyyaml>=5.1; extra == 'standard'"]
+
+改动后：在干净环境里**只装 .[dev]（不含 api extra）**，PyYAML 由本项目自己带入：
+
+$ python3 -m venv /tmp/depcheck/venv
+$ /tmp/depcheck/venv/bin/pip install -e '.[dev]'
+$ /tmp/depcheck/venv/bin/pip show pyyaml | grep -E '^(Name|Version)'
+Name: PyYAML
+Version: 6.0.3
+$ /tmp/depcheck/venv/bin/pip show pyyaml | grep -i 'Required-by'
+Required-by: data-intelligence-platform
+$ /tmp/depcheck/venv/bin/pip show uvicorn
+WARNING: Package(s) not found: uvicorn
+$ PYTHONPATH=packages/dip-skills/src /tmp/depcheck/venv/bin/python -c "from dip_skills import load_skill_spec; print(load_skill_spec('templates/skill.yaml').qualified_name)"
+demo.echo@1
+
+即：uvicorn 不在的环境里依然可用 —— 旧写法在这个环境必然 ImportError。
+
+
+门禁
+====
+$ bash ops/gate.sh
+== lint（ruff）
+All checks passed!
+   ✅ PASS
+== 测试（pytest）
+   ✅ PASS
+
+GATE: ALL_PASS
