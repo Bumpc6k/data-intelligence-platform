@@ -10,7 +10,12 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 SESSION=firewall
 PORT="${FIREWALL_PORT:-18210}"
-EXPORT_PATH="PYTHONPATH=$ROOT/apps/firewall/src"
+POLICY="${FIREWALL_POLICY:-$ROOT/apps/firewall/policies/default.yaml}"
+TTL="${FIREWALL_TOKEN_TTL_SECONDS:-300}"
+# 环境变量必须**内联进 tmux 的命令行**：tmux 开新会话用的是它自己那个服务器进程的环境，
+# 不继承调用方 export 出来的变量。只 export 不内联的话，FIREWALL_POLICY / FIREWALL_TOKEN_TTL_SECONDS
+# 会被**静默忽略**（写错也不报错，看起来一切正常）——这正是我们要避免的失效方式。
+INLINE="PYTHONPATH=$ROOT/apps/firewall/src FIREWALL_POLICY=$POLICY FIREWALL_TOKEN_TTL_SECONDS=$TTL"
 
 if [ "${1:-start}" = "stop" ]; then
   tmux has-session -t "$SESSION" 2>/dev/null && tmux kill-session -t "$SESSION" && echo "已停 $SESSION" || echo "$SESSION 未在运行"
@@ -19,7 +24,7 @@ fi
 
 tmux has-session -t "$SESSION" 2>/dev/null && tmux kill-session -t "$SESSION"
 tmux new-session -d -s "$SESSION" -c "$ROOT" \
-  "$EXPORT_PATH .venv/bin/uvicorn firewall.main:app --host 127.0.0.1 --port $PORT"
+  "$INLINE .venv/bin/uvicorn firewall.main:app --host 127.0.0.1 --port $PORT"
 
 for _ in $(seq 1 20); do
   curl -s --noproxy '*' -o /dev/null --max-time 1 "http://127.0.0.1:$PORT/health" && break
@@ -27,6 +32,7 @@ for _ in $(seq 1 20); do
 done
 
 echo "firewall : http://127.0.0.1:$PORT/health"
-echo "策略表   : ${FIREWALL_POLICY:-$ROOT/apps/firewall/policies/default.yaml}"
+echo "策略表   : $POLICY"
+echo "令牌时效 : $TTL 秒"
 curl -s --noproxy '*' --max-time 3 "http://127.0.0.1:$PORT/health" || echo "（服务未就绪，用 tmux attach -t $SESSION 看日志）"
 echo
