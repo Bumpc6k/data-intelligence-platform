@@ -1,0 +1,38 @@
+==================================================================
+M1 垂直切片演示    2026-09-26 21:38:17
+问题：ads.ads_产销存月报 的产量怎么来的？
+==================================================================
+
+[1/5] 数据智能内核（http://127.0.0.1:18080）
+  已在运行
+  内核口径条数：75
+
+[2/5] 模型网关（http://127.0.0.1:18200）
+  已在运行
+  网关配置：{"ok":true,"service":"model-gateway","version":"0.1.0","base_url":"https://api.deepseek.com","model":"deepseek-v4-flash","key_configured":true,"timeout":30.0,"max_attempts":2,"rate_limit_per_min":0}
+
+[3/5] 对话外壳
+  未配置 DSH_HOME —— 本链的「外壳」由内嵌驱动扮演（MCP stdio 直连 skill）。
+  这不影响 M1 验收：验收要的是「经 MCP 调到我们的 skill 并带回执」。
+
+[4/5] 经 MCP 调 skill 取凭证；[5/5] 出口事实校验
+------------------------------------------------------------------
+INFO:dip-lineage-skill:启动 dip-lineage-skill，内核地址 http://127.0.0.1:18080
+INFO:httpx:HTTP Request: POST http://127.0.0.1:18080/upstream "HTTP/1.0 200 OK"
+  问题：ads.ads_产销存月报 的产量怎么来的？
+  ✓ MCP 握手成功；tools/list → ['lineage_analyze']
+  ✓ skill 回执：endpoint=POST /upstream ms=12 attempts=1 evidence_count=9
+  凭证 1｜血缘图    POST /upstream   上游 9 张表 / 13 条边；涉及 10 张表
+  凭证 2｜字段词表   POST /kb/search  命中 20 条口径相关词条
+  凭证 3｜口径公式   POST /kb/metric  命中 6 条口径定义
+  白名单：10 张表 / 0 个字段 / 2 个数字
+  ✓ 网关返回：HTTP 200  tokens=1858
+  ✓ 出口校验：ok=False checked=10  拦截：编造字段 kb_search；编造数字 10（归一化 10）；编造数字 6（归一化 6）；编造数字 20（归一化 20）
+
+答案全文：
+ads.ads_产销存月报 的产量来自 cdw.dws_产销存汇总，向上可追溯到 cdw.dws_产量汇总 和 cdw.dwd_卷烟产量明细。血缘图显示该链路有 9 张上游表、13 条边、涉及 10 张表，口径命中 metric:产量 的 6 条定义和 kb_search:产量 的 20 条词条。
+
+❌ 卡在第 5 步：模型输出越界（编造了回执里没有的东西），已拦下
+   实际返回：[{"kind": "field", "token": "kb_search", "normalized": null}, {"kind": "number", "token": "10", "normalized": "10"}, {"kind": "number", "token": "6", "normalized": "6"}, {"kind": "number", "token": "20", "normalized": "20"}]
+
+❌ 驱动以状态码 3 退出（见上面的实际返回）。证据：/mnt/d/Projects/data-intelligence-platform/docs/evidence/m1-20260926-213817.txt

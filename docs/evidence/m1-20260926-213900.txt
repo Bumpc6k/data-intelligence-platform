@@ -1,0 +1,59 @@
+==================================================================
+M1 垂直切片演示    2026-09-26 21:39:00
+问题：ads.ads_产销存月报 的产量怎么来的？
+==================================================================
+
+[1/5] 数据智能内核（http://127.0.0.1:18080）
+  已在运行
+  内核口径条数：75
+
+[2/5] 模型网关（http://127.0.0.1:18200）
+  已在运行
+  网关配置：{"ok":true,"service":"model-gateway","version":"0.1.0","base_url":"https://api.deepseek.com","model":"deepseek-v4-flash","key_configured":true,"timeout":30.0,"max_attempts":2,"rate_limit_per_min":0}
+
+[3/5] 对话外壳
+  未配置 DSH_HOME —— 本链的「外壳」由内嵌驱动扮演（MCP stdio 直连 skill）。
+  这不影响 M1 验收：验收要的是「经 MCP 调到我们的 skill 并带回执」。
+
+[4/5] 经 MCP 调 skill 取凭证；[5/5] 出口事实校验
+------------------------------------------------------------------
+INFO:dip-lineage-skill:启动 dip-lineage-skill，内核地址 http://127.0.0.1:18080
+INFO:httpx:HTTP Request: POST http://127.0.0.1:18080/upstream "HTTP/1.0 200 OK"
+  问题：ads.ads_产销存月报 的产量怎么来的？
+  ✓ MCP 握手成功；tools/list → ['lineage_analyze']
+  ✓ skill 回执：endpoint=POST /upstream ms=10 attempts=1 evidence_count=9
+  凭证 1｜血缘图    POST /upstream   上游 9 张表 / 13 条边；涉及 10 张表
+  凭证 2｜字段词表   POST /kb/search  命中 20 条口径相关词条
+  凭证 3｜口径公式   POST /kb/metric  命中 6 条口径定义
+  白名单：22 张表 / 8 个字段 / 5 个数字
+  ✓ 网关返回：HTTP 200  tokens=1911
+  ✓ 出口校验：ok=True checked=10  通过：10 项事实均来自回执
+
+==================================================================
+M1 验收结论
+==================================================================
+问题：ads.ads_产销存月报 的产量怎么来的？
+
+答案：
+  ads.ads_产销存月报 的产量由 cdw.dws_产销存汇总 汇总而来，并可追溯到 cdw.dws_产量汇总、cdw.dwd_卷烟产量明细、cdw.dwd_卷烟产量码段明细 等上游产量表。  
+该口径血缘图涉及 10 张表、上游 9 张表、13 条边，字段词表命中 20 条口径相关词条，口径公式命中 6 条口径定义。
+
+凭证（3 条）：
+  1. [血缘图] 上游 9 张表 / 13 条边；涉及 10 张表
+     来源端点：POST /upstream    graph:ads.ads_产销存月报
+     取数方式：经 MCP skill（lineage_analyze）
+  2. [字段词表] 命中 20 条口径相关词条
+     来源端点：POST /kb/search    kb_search:产量
+     取数方式：内核客户端直连（只读）
+  3. [口径公式] 命中 6 条口径定义
+     来源端点：POST /kb/metric    metric:产量
+     取数方式：内核客户端直连（只读）
+
+回执与耗时：
+  skill 回执：endpoint=POST /upstream  耗时=10ms  尝试次数=1  证据条数=9  usable=True
+  模型网关：tokens=1911（prompt 250 / completion 1661）
+  出口校验：通过（10 项事实全部来自回执）
+
+✅ M1 垂直切片跑通：经 MCP 调 skill + 带凭证 + 回执 + 出口校验
+
+证据已写入：/mnt/d/Projects/data-intelligence-platform/docs/evidence/m1-20260926-213900.txt
