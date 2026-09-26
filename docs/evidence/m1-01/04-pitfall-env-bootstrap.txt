@@ -1,0 +1,22 @@
+# 采集时间: 2026-09-26 17:47:48 CST | 环境: Ubuntu 24.04.5 LTS | 主机: WSL2 (Windows 11)
+
+复现：在与仓库 .env 同名的目录里放 DEEPSEEK_BASE_URL，然后启动 dsh。
+$ cat .env
+DEEPSEEK_API_KEY=sk-dummy
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+
+$ dsh --profile headless "ping"   # 期望：启动即报错
+file:///opt/dsh-toolchain/node-v24.21.0-linux-x64/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1056
+		throw new Error(`${binName}: ${path} sets "${name}", which only the launching environment may set (it decides how this process starts, where its code and instructions load from, or how it reaches the network); ${remedy}`);
+		      ^
+
+Error: dsh: /tmp/dsh-env-pitfall/.env sets "DEEPSEEK_BASE_URL", which only the launching environment may set (it decides how this process starts, where its code and instructions load from, or how it reaches the network); export DEEPSEEK_BASE_URL instead of putting it in a .env file
+    at readEnvLayer (file:///opt/dsh-toolchain/node-v24.21.0-linux-x64/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1056:9)
+    at loadLayeredEnv (file:///opt/dsh-toolchain/node-v24.21.0-linux-x64/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1077:18)
+    at runCli (file:///opt/dsh-toolchain/node-v24.21.0-linux-x64/lib/node_modules/@deepseek-ai/dsh/lib/bin.js:147:18)
+    at async file:///opt/dsh-toolchain/node-v24.21.0-linux-x64/lib/node_modules/@deepseek-ai/dsh/lib/bin.js:168:23
+
+Node.js v24.21.0
+exit=1
+
+# 结论：dsh 拒绝从 .env 读取 bootstrap-only 变量（DEEPSEEK_BASE_URL），必须 export。

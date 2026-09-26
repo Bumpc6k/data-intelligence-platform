@@ -1,0 +1,20 @@
+# 采集时间: 2026-09-26 17:47:48 CST | 环境: Ubuntu 24.04.5 LTS | 主机: WSL2 (Windows 11)
+
+$ node -v
+v24.21.0
+$ npm -v
+11.19.0
+$ which dsh
+/opt/dsh-toolchain/node-v24.21.0-linux-x64/bin/dsh
+$ dsh --version
+0.1.5-rc.3
+$ npm config get registry
+https://registry.npmmirror.com
+$ npm view @deepseek-ai/dsh dist-tags --json
+{
+  "alpha": "0.1.7-alpha.2",
+  "latest": "0.1.5-rc.3",
+  "next": "0.1.7-rc.2"
+}
+
+# 说明：镜像 latest=0.1.5-rc.3 与本次锁定一致；next=0.1.7-rc.2 为上游仓库 master 的版本。
