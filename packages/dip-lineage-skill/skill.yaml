@@ -1,0 +1,64 @@
+# 契约声明：血缘分析 skill（工作项 M1-03，按 M1-02 的规范写）
+#
+# 本文件由 dip_skills.load_skill_spec 校验；实现里的常量必须与它一致
+# （tests/test_lineage_skill.py::test_declaration_matches_implementation 会拦不一致）。
+# 字段口径见《架构讨论：Harness + 插件化》§3 的 9 类字段。
+
+# 1. 唯一名 + 版本
+name: lineage.analyze
+version: 1
+
+# 2. 什么时候用（写给决策模型看的描述）
+when: 用户问某张表或某个字段的血缘（「怎么来的」「上游有哪些」），或直接给了一段 SQL 要看字段级血缘与影响面
+
+# 3. 入参 / 出参 JSON Schema
+input_schema:
+  type: object
+  properties:
+    question:
+      type: string
+      description: 自然语言问题，如「ads.ads_产销存月报 的产量怎么来的？」
+    table:
+      type: string
+      description: 直接给表名（库.表），走 /upstream
+    sql:
+      type: string
+      description: 直接给 SQL，走 /analyze
+    depth:
+      type: integer
+      description: 血缘向上追溯的层数
+  required: []
+output_schema:
+  type: object
+  properties:
+    receipt:
+      type: object
+      description: 回执：来源端点 / 耗时 / 证据条数（必回，失败也回）
+    lineage:
+      type: object
+      description: 内核返回的原始结构化数据，不改写
+    tables:
+      type: array
+      description: 涉及的固定表清单
+  required: [receipt]
+
+# 4. 副作用种类：决定防火墙要求的最低档位。本 skill 只读
+side_effect: read
+
+# 5. 需要的权限点
+auth_scope:
+  - lineage:read
+
+# 6. 幂等 / 超时（秒）/ 重试语义（由内核客户端实现，见 integrations/lineage-client）
+idempotent: true
+timeout: 30
+retry: connect_only
+
+# 7. 返回值能作为哪类证据
+evidence_kind: lineage
+
+# 8. 结果用哪个视图渲染（血缘图）
+renderer: graph
+
+# 9. 单次会话内的调用上限（防循环）
+budget: 6
