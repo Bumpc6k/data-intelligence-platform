@@ -1,0 +1,94 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>双人分工与 Windows 数据开发约定</title><style>body{font:12.5px/1.65 -apple-system,"Microsoft YaHei",sans-serif;max-width:940px;margin:0 auto;padding:22px 26px;color:#111}h1{font-size:19px}h2{font-size:15px;margin-top:20px;border-left:3px solid #4f46e5;padding-left:9px}h3{font-size:13.5px;margin-top:14px}table{border-collapse:collapse;width:100%;margin:6px 0;font-size:11px}th,td{border:1px solid #ccc;padding:4px 6px;vertical-align:top}th{background:#f4f5f7}code{background:#f2f3f6;padding:1px 4px;border-radius:4px;font-size:10.5px}pre{background:#f7f8fa;border:1px solid #e6e8ec;border-radius:6px;padding:8px;font-size:10.5px;white-space:pre-wrap}blockquote{border-left:3px solid #ddd;margin:6px 0;padding-left:10px;color:#555}li{margin-left:16px}</style></head><body><h1>双人分工 与 Windows 端数据开发约定</h1>
+<blockquote> 2026-09-26 ｜ 场景：<b>2 名开发者</b>（你：Windows 端做数据开发为主；朋友：代码开发为主）+ 各自的 AI 助手</blockquote>
+<blockquote> 配套：<code>2026-09-26-开发规范与AI协作.md</code>（通用规则）、<code>AGENTS.md</code>（AI 须知）</blockquote>
+<p>本文只讲两件通用规范没覆盖的事：<b>① 分工与交接点 ② Windows 端数据开发的特殊约定</b>。</p>
+<p>---</p>
+<h2>1. 分工（按&quot;谁能做决定&quot;划，不按&quot;谁写得多&quot;划）</h2>
+<table>
+<tr><th>面</th><th>你（数据开发 + 产品判断）</th><th>朋友（代码开发）</th></tr>
+<tr><td><b>业务口径</b></td><td>✅ <b>唯一责任人</b>：口径对不对、公式怎么算、哪些表算核心</td><td>不判断业务对错，只按 Issue 实现</td></tr>
+<tr><td><b>数据侧</b></td><td>✅ SQL 脚本、demo 数据、表结构、字段中文名</td><td>提供工具支持（解析、校验、入库流水线）</td></tr>
+<tr><td><b>平台代码</b></td><td>可参与（尤其前端与验收）</td><td>✅ 主力：skill / 防火墙 / 网关 / 前端</td></tr>
+<tr><td><b>原型与交互</b></td><td>✅ 提需求、看原型、拍板（我出原型）</td><td>按定稿原型实现</td></tr>
+<tr><td><b>验收</b></td><td>✅ 业务验收（&quot;答得对不对&quot;）</td><td>技术自检（门禁 + 测试）</td></tr>
+<tr><td><b>架构决策</b></td><td>✅ 拍板（ADR 由我起草）</td><td>提方案、反对要写理由</td></tr>
+</table>
+<p><b>交接点（只有三个，别多）</b>：</p>
+<table>
+<tr><th>交接物</th><th>谁给谁</th><th>形式</th><th>触发时机</th></tr>
+<tr><td><b>数据/口径样例</b></td><td>你 → 对方</td><td>一份可解析的 SQL + 期望的口径描述（放 <code>examples/</code>）</td><td>对方要开发&quot;提炼流水线/口径校验&quot;前</td></tr>
+<tr><td><b>接口与字段定义</b></td><td>对方 → 你</td><td>Issue 或 ADR 里的接口草案（半页）</td><td>动到数据结构/接口前，<b>先定再写</b></td></tr>
+<tr><td><b>验收结论</b></td><td>我（代跑）→ 双方</td><td>逐条&quot;通过/不通过 + 证据&quot;</td><td>每个 PR</td></tr>
+</table>
+<blockquote> 一句话：<b>你管&quot;对不对&quot;，他管&quot;能不能跑&quot;，我管&quot;验没验&quot;。</b></blockquote>
+<p>---</p>
+<h2>2. 环境分工（避免两个人在同一台机器上互相踩）</h2>
+<table>
+<tr><th>位置</th><th>谁用</th><th>跑什么</th></tr>
+<tr><td><b>Windows 侧</b></td><td>你</td><td>SQL 客户端、数据开发工具、Excel/帆软这类；<b>不要</b>在 Windows 上跑平台服务</td></tr>
+<tr><td><b>WSL（Ubuntu）</b></td><td>朋友 + 我</td><td>平台服务（<code>:18100</code>）、内核（<code>:18080</code>）、审计库（<code>:15432</code>）、门禁、测试</td></tr>
+<tr><td><b>远端</b></td><td>双方</td><td>GitHub：Issues / PR / 门禁 CI 是<b>唯一事实来源</b></td></tr>
+</table>
+<p>规则：</p>
+<li><b>不在 Windows 上建第二套开发环境</b>（路径分隔符、venv 布局、编码都会带来假问题）——要跑服务就在 WSL 里跑。</li>
+<li>Windows 与 WSL 之间传文件用 <code>/mnt/c/...</code>（不要复制来复制去，容易两版不一致）。</li>
+<li>服务起法（WSL 里，三条命令）：见 <code>AGENTS.md</code> §4；<code>bash ops/start-portal.sh</code> 会顺带带起内核。</li>
+<p>---</p>
+<h2>3. Windows 端做数据开发的五条约定</h2>
+<h3>3.1 红线（没有例外）</h3>
+<li><b>不许把公司生产数据带到个人环境</b>（导出文件、截图、样本数据都不行）。平台开发一律用<b>自造的 demo 数据</b>。</li>
+<li>演示数据放仓库的 <code>examples/</code>（内核仓库已有 <code>examples/warehouse</code>、<code>examples/knowledge_demo</code>），<b>不要放个人目录</b>。</li>
+<h3>3.2 SQL 脚本规范（直接影响血缘解析与口径提炼）</h3>
+<table>
+<tr><th>规则</th><th>原因</th></tr>
+<tr><td>文件名 <code>t_&lt;表名&gt;.sql</code>，一个脚本一张目标表</td><td>解析器按&quot;目标表&quot;建血缘；一个脚本多目标会让归属混乱</td></tr>
+<tr><td><b>脚本头部注释写清业务含义</b>（这张表是什么、关键字段的口径）</td><td><b>注释就是口径的原材料</b>，提炼流水线会读它；注释写得好，口径就是自动来的</td></tr>
+<tr><td>只用常规语法（<code>INSERT OVERWRITE</code> / <code>SELECT</code> / <code>JOIN</code> / <code>GROUP BY</code>），<b>不写方言扩展与动态拼接</b></td><td>血缘解析器认常规语法；动态 SQL 会让血缘断链</td></tr>
+<tr><td>字段<b>必须带中文名登记</b>（走知识库的字段词表）</td><td>用户提问用中文（&quot;产量&quot;），靠中文名把问题和字段对上</td></tr>
+<tr><td>分区条件写在 <code>PARTITION (...)</code> 里，不要拼进 <code>WHERE</code></td><td>解析器能识别分区过滤，便于影响面分析</td></tr>
+</table>
+<h3>3.3 口径回写流程（<b>改了必须走这条路</b>）</h3>
+<pre>
+你在 Windows 侧发现/修订口径
+  → 提交&quot;候选&quot;（不是直接改知识库）
+  → 必须带：来源脚本路径 + 公式 + 依赖字段
+  → 责任人（你）审核
+  → 版本化入库（可回滚）
+</pre>
+<p><b>质量门禁</b>：<b>没有来源脚本的口径一律不许入库</b>；同字段两条公式冲突时<b>必须择一</b>，不允许并存。</p>
+<h3>3.4 数据变更如何通知对方</h3>
+<p>在对应 Issue 下留一条（不要发在群里）：</p>
+<pre>
+【数据变更】&lt;表名&gt; &lt;字段&gt;
+变更：&lt;从什么改成什么&gt;
+原因：&lt;业务原因&gt;
+影响：&lt;下游表 / 任务 / 口径&gt;
+证据：&lt;脚本路径 + 期望结果&gt;
+</pre>
+<p>对方（或我）据此判断是否需要更新 skill / 防火墙策略 / 演示数据。</p>
+<h3>3.5 你这边最该用的两个能力</h3>
+<li><b>血缘解析</b>（内核 <code>:18080</code>）：新写完一段 SQL，先跑一次解析，看上下游对不对——比人工核对快得多。</li>
+<li><b>报告</b>：解析会顺带生成自包含 HTML 报告，可以直接发给同事看（<code>http://127.0.0.1:18080/report/&lt;id&gt;</code>）。</li>
+<p>---</p>
+<h2>4. 日常节奏（两个人都在业余时间，所以尽量异步）</h2>
+<table>
+<tr><th>节奏</th><th>做什么</th><th>形式</th></tr>
+<tr><td>每天</td><td>各自在自己 Issue 下留一条进度（进展/计划/卡点）</td><td>Issue 评论</td></tr>
+<tr><td>每周一次（15 分钟）</td><td>对齐：本周完成、下周目标、卡点、需要决策的事</td><td>会 or 文字</td></tr>
+<tr><td>每轮结束</td><td>我按 Issue 验收标准逐条跑 + 给结论</td><td>PR 评论 + 简报</td></tr>
+<tr><td>有架构问题</td><td><b>不要边写边改</b>：开 Issue 写半页方案，对方点头再动</td><td>Issue</td></tr>
+</table>
+<p>---</p>
+<h2>5. 最容易出问题的四件事（提前说清）</h2>
+<table>
+<tr><th>风险</th><th>表现</th><th>约定</th></tr>
+<tr><td><b>口径分歧</b></td><td>两个人都&quot;知道&quot;产量怎么算，但算法不同</td><td>口径以<b>你审核入库的版本</b>为准；有分歧先仲裁再写代码</td></tr>
+<tr><td><b>接口没定就并行</b></td><td>各写一套，合不上</td><td><b>契约先行</b>：接口先定（哪怕只写签名），再并行</td></tr>
+<tr><td><b>两个人改同一文件</b></td><td>反复冲突、rebase 到心态崩</td><td>同一文件同一时间只允许一人改；开工前在 Issue 留言&quot;我在改 X&quot;</td></tr>
+<tr><td><b>AI 产出没验证就提</b></td><td>&quot;AI 说完成了&quot;，实际没跑</td><td><b>证据三件套</b>（命令 + 输出 + 含反例的测试 + 边界声明）；我复跑不出同样结果即打回</td></tr>
+</table>
+<p>---</p>
+<h2>6. 你现在要做的三步</h2>
+<li><b>把这两个文件发给朋友</b>：<code>AGENTS.md</code>（AI 须知）+ 本文件（分工与数据约定）</li>
+<li><b>约定一个固定节奏</b>：每天 Issue 留进度、每周 15 分钟对齐</li>
+<li><b>从关键路径开工</b>：#1 skill 契约（他）→ #3 血缘 skill（他）；你这边先准备 <b>一份可解析的 SQL + 对应口径说明</b>（放 <code>examples/</code>），这是 M3 提炼流水线的输入</li></body></html>
