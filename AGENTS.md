@@ -116,6 +116,9 @@ PR 会被**逐条跑验收标准**；不通过会按格式打回（哪一条没�
 
 ---
 
+> **换行符（Windows 检出）**：Git for Windows 默认 `core.autocrlf=true`，会把文本文件检出成 CRLF，导致 `ops/*.sh` 在 WSL 里报 `set: pipefail: invalid option name`。
+> 根目录 `.gitattributes`（`* text=auto eol=lf`）已把检出行钉死在 LF。**已经克隆过的旧工作区**需要 `git rm --cached -r . && git reset --hard`（或重新 clone）才会转成 LF——否则你会以为是脚本坏了。
+
 ## 9. 代码结构速览
 
 ```
