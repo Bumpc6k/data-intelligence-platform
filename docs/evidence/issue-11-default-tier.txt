@@ -1,0 +1,53 @@
+Issue #11（M2-05 未命中默认档显式化）验收证据
+===============================================
+
+验证日期：2026-09-26
+被测分支：feat/m2-05-default-tier（基于 feat/m2-02-token；这是堆叠 PR，见 PR 说明）
+环境：WSL Ubuntu-22.04（Python 3.10.12）
+服务：apps/firewall http://127.0.0.1:18210
+
+本文件是一条脚本的真实输出（原样粘贴，未编辑）：
+  脚本：bash /mnt/d/Projects/_fw-miss-demo.sh
+
+覆盖验收的两半：
+  ① 「策略表显式声明 default_tier」—— 见第 1 节（策略表文件里的 `default_tier: approval`）
+     与第 2 节（/health 读到的就是它）；
+  ② 「未命中时按声明档处理，且日志写明"未命中"」—— 见第 3 节（响应）与第 4 节（**服务日志**）。
+
+第 4 节是重点：光有响应里的 `matched=false` 不够 —— 响应随请求一起消失，事后查不到。
+日志那条带了 actor / action / target / 策略指纹，事后能回答"谁、想干什么、当时用的哪一版策略"。
+
+第 5 节是反例：命中的动作**不该**刷这条警告（命中前后日志行数不变）。
+全是噪音的日志等于没有日志。
+
+================================================================================
+
+=== 1) 策略表里 default_tier 是**显式声明**的（不是代码里的常量）===
+4:# 加载时严格校验：档位写错、规则重名、缺 default_tier —— 一律起不来，不会"静默按默认值跑"。
+14:default_tier: approval
+60:# 它们会落到 default_tier=approval —— 也就是仍然需要人确认一次。
+62:# 别改 default_tier：default_tier 是兜底，放开它等于把所有没写过的动作一起放开。
+
+=== 2) 起服务 ===
+  /health 读到的 default_tier = approval
+
+=== 3) 判定一个策略表里没有的动作 ===
+{
+  "tier": "approval",
+  "disposition": "require_approval",
+  "matched": false,
+  "matched_rules": [],
+  "reason": "未命中任何策略规则，按 default_tier=approval 处理（fail-closed：拿不准不放松）",
+  "requires_token": true,
+  "fingerprint": "6bfc014a51077515",
+  "policy_version": 1,
+  "policy_digest": "6bfcaadc1263",
+  "policy_path": "/mnt/d/Projects/data-intelligence-platform/apps/firewall/policies/default.yaml"
+}
+
+=== 4) 服务的日志里有没有写明「未命中」（这是本 Issue 的验收点）===
+判定未命中任何策略规则，按 default_tier=approval 处理（fail-closed：拿不准不放松）｜actor=么慌｜action=没人定义过这个动作｜target=ads.t｜policy_digest=6bfcaadc1263                 
+
+=== 5) 反例：命中的动作**不该**刷「未命中」警告（否则日志全是噪音）===
+  select 判定：tier=auto matched=True rules=['read-only']
+  「未命中」日志行数：命中前 1 → 命中后 1（应当不变）

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 import pathlib
 
 import pytest
@@ -85,6 +86,40 @@ def test_unknown_action_falls_back_to_declared_default_tier(policy: Policy):
     assert verdict.tier is policy.default_tier is Tier.APPROVAL
     assert verdict.requires_token is True
     assert "未命中" in verdict.reason
+
+
+def test_miss_is_logged_explicitly(policy: Policy, caplog: pytest.LogCaptureFixture):
+    """M2-05：未命中必须在**日志**里写明。
+
+    响应里的 `matched=false` 随请求一起消失了，日志是唯一的长期记录。否则"没人管、走默认档"
+    与"命中了策略"在事后完全分不出来 —— 而这正是静默失效的样子：看起来档位判对了，
+    其实是策略表漏了它。
+    """
+    with caplog.at_level(logging.WARNING, logger="firewall.policy"):
+        verdict = policy.judge(actor="么慌", action="没人定义过这个动作", target="ads.t")
+
+    assert verdict.matched is False
+    logged = caplog.text
+    assert "未命中" in logged
+    assert "default_tier=approval" in logged
+    assert "么慌" in logged, "日志要能定位到是谁做的"
+    assert "没人定义过这个动作" in logged
+    assert "ads.t" in logged
+    assert policy.digest in logged, "日志要带策略指纹：事后能回答当时用的是哪一版策略"
+
+
+def test_hit_does_not_warn_about_a_miss(policy: Policy, caplog: pytest.LogCaptureFixture):
+    """命中了就别刷"未命中"警告 —— 日志里全是噪音等于没有日志。"""
+    with caplog.at_level(logging.WARNING, logger="firewall.policy"):
+        policy.judge(actor="x", action="select", target="ads.t")
+    assert "未命中" not in caplog.text
+
+
+def test_policy_carries_its_own_digest(policy: Policy):
+    """指纹由 Policy 自己算（单一真相）：日志与接口用的是同一个值。"""
+    assert len(policy.digest) == 12
+    assert all(char in "0123456789abcdef" for char in policy.digest)
+    assert Policy.load(SHIPPED).digest == policy.digest
 
 
 def test_taking_the_stricter_tier_when_two_rules_match(tmp_path: pathlib.Path):

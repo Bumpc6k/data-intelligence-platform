@@ -42,6 +42,19 @@
 后者是**静默失效**的温床：看起来判对了，其实是策略表漏了它。M2-04（中文动作名）
 与 M2-05（未命中默认档显式化）治的就是这个 —— 调用方因此必须看 `matched`，不能只看 `tier`。
 
+### 未命中会写进日志（M2-05）
+
+只有 `matched=false` 还不够：响应随请求一起消失，事后查不到。所以**每次未命中都会写一条
+WARNING**，带上 actor / action / target / 策略指纹：
+
+```
+判定未命中任何策略规则，按 default_tier=approval 处理（fail-closed：拿不准不放松）
+｜actor=么慌｜action=没人定义过这个动作｜target=ads.t｜policy_digest=6bfcaadc1263
+```
+
+**命中不会**刷这条日志 —— 全是噪音的日志等于没有日志。想看它：
+`tmux capture-pane -pJ -S -100 -t firewall | grep 未命中`（或 `tmux attach -t firewall`）。
+
 ---
 
 ## 3. 接口
