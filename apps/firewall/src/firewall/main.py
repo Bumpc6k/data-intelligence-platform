@@ -24,6 +24,7 @@ import os
 import pathlib
 from dataclasses import dataclass
 
+import dip_pg
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -82,6 +83,11 @@ def load_policy() -> LoadedPolicy:
 async def lifespan(_app: FastAPI):
     # 策略表坏了就别起来 —— 一个"判定不了但活着"的防火墙比没有防火墙更危险。
     load_policy()
+    # 数据库坏了**不影响服务起来**：判定照做，只是不留痕（Issue #9 的验收）。
+    try:
+        dip_pg.init_schema()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[firewall] 数据库不可用，判定将不落库：{exc}")
     yield
 
 
@@ -109,6 +115,9 @@ class JudgeResponse(BaseModel):
     policy_version: int
     policy_digest: str
     policy_path: str
+    #: 是否已落库。**判定结果不受落库成败影响** —— 这里如实告诉调用方有没有留痕。
+    persisted: bool
+    persist_error: str | None = None
 
 
 class TokenIssueRequest(BaseModel):
@@ -124,6 +133,8 @@ class TokenIssueResponse(BaseModel):
     fingerprint: str
     approver: str
     actor: str
+    persisted: bool
+    persist_error: str | None = None
 
 
 class VerifyRequest(BaseModel):
@@ -136,6 +147,8 @@ class VerifyRequest(BaseModel):
 class VerifyResponse(BaseModel):
     ok: bool
     reason: str
+    persisted: bool
+    persist_error: str | None = None
 
 
 class HealthResponse(BaseModel):
@@ -147,6 +160,8 @@ class HealthResponse(BaseModel):
     rules: list[dict]
     token_ttl_seconds: int
     issued_token_count: int
+    #: 数据库是否可用。不可用时判定照做，只是不留痕。
+    db_available: bool
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])
@@ -161,6 +176,7 @@ def health() -> HealthResponse:
         rules=[{"name": rule.name, "tier": rule.tier.value} for rule in loaded.policy.rules],
         token_ttl_seconds=tokens.ttl_seconds,
         issued_token_count=len(tokens),
+        db_available=dip_pg.available(),
     )
 
 
@@ -174,8 +190,29 @@ def judge(request: JudgeRequest) -> JudgeResponse:
         target=request.target,
         sql=request.sql,
     )
-    return JudgeResponse(**verdict.as_dict(), policy_version=loaded.policy.version,
-                         policy_digest=loaded.digest, policy_path=loaded.path)
+    # 留痕放在判定**之后**，且失败不影响返回值 —— 数据库抖动不该把安全判定带崩。
+    persisted = dip_pg.record_judgment(
+        actor=request.actor,
+        action=request.action,
+        target=request.target,
+        sql=request.sql,
+        tier=verdict.tier.value,
+        disposition=verdict.disposition,
+        matched=verdict.matched,
+        matched_rules=verdict.matched_rules,
+        reason=verdict.reason,
+        fingerprint=verdict.fingerprint,
+        policy_version=loaded.policy.version,
+        policy_digest=loaded.digest,
+    )
+    return JudgeResponse(
+        **verdict.as_dict(),
+        policy_version=loaded.policy.version,
+        policy_digest=loaded.digest,
+        policy_path=loaded.path,
+        persisted=persisted.ok,
+        persist_error=persisted.error,
+    )
 
 
 @app.post("/tokens/issue", response_model=TokenIssueResponse, tags=["tokens"])
@@ -191,8 +228,24 @@ def issue_token(request: TokenIssueRequest) -> TokenIssueResponse:
         actor=request.actor, action=request.action, target=request.target, sql=request.sql
     ).fingerprint
     token = tokens.issue(actor=request.actor, fingerprint=fingerprint)
+    persisted = dip_pg.record_token_event(
+        event="issued",
+        actor=request.actor,
+        action=request.action,
+        target=request.target,
+        sql=request.sql,
+        ok=True,
+        approver=request.approver,
+        reason=f"审批通过，签发令牌（审批人={request.approver}）",
+        fingerprint=fingerprint,
+    )
     return TokenIssueResponse(
-        token=token.value, fingerprint=fingerprint, approver=request.approver, actor=request.actor
+        token=token.value,
+        fingerprint=fingerprint,
+        approver=request.approver,
+        actor=request.actor,
+        persisted=persisted.ok,
+        persist_error=persisted.error,
     )
 
 
@@ -204,6 +257,21 @@ def verify(request: VerifyRequest) -> VerifyResponse:
         actor="", action=request.action, target=request.target, sql=request.sql
     ).fingerprint
     ok, reason = tokens.verify(value=request.token, fingerprint=fingerprint)
+
+    # 被拒的那次也要留痕：否则"谁试图用一张不合法的令牌"就查不到了。
+    known = tokens.info(value=request.token)
+    persisted = dip_pg.record_token_event(
+        event="verified",
+        actor=known.actor if known else "(未知令牌)",
+        action=request.action,
+        target=request.target,
+        sql=request.sql,
+        ok=ok,
+        reason=reason,
+        fingerprint=fingerprint,
+    )
     if not ok:
-        raise HTTPException(status_code=403, detail=reason)
-    return VerifyResponse(ok=True, reason=reason)
+        # 403 的响应体只有 detail，所以把"未落库"直接缀在原因里 —— 别让调用方以为留痕了。
+        hint = "" if persisted.ok else f"（且未落库：{persisted.error}）"
+        raise HTTPException(status_code=403, detail=f"{reason}{hint}")
+    return VerifyResponse(ok=True, reason=reason, persisted=persisted.ok, persist_error=persisted.error)

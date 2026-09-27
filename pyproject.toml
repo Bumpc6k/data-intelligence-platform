@@ -37,12 +37,14 @@ pythonpath = [
   "packages/dip-agent/src",
   "packages/dip-skills/src",
   "packages/dip-lineage-skill/src",
+  "packages/dip-pg/src",
   "integrations/lineage-client/src",
 ]
 testpaths = ["tests", "integrations/lineage-client/tests", "packages"]
 addopts = "-q --strict-markers"
 markers = [
   "smoke: 需要真实内核服务（不在则跳过）",
+  "pg: 需要真实 PostgreSQL（不在则跳过）",
 ]
 asyncio_mode = "auto"
 
