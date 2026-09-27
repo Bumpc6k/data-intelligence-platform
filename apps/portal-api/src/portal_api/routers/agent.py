@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 
 from .. import store as store_mod
 from ..deps import get_agent
+from ..doc_support import with_document_background
+from .doc_channel import get_doc_channel
 
 router = APIRouter(tags=["agent"])
 
@@ -19,6 +21,7 @@ class AskRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000, description="用户原话")
     session_id: str = Field(default="default", max_length=64, description="会话标识（PG 持久化，W-112）")
     mode: str = Field(default="rule", pattern="^(rule|llm)$")
+    with_docs: bool = Field(default=False, description="是否同时问文档通道（结果只作背景，M3-04 / #15）")
 
 
 def store() -> Any:
@@ -27,10 +30,11 @@ def store() -> Any:
 
 
 @router.post("/agent/ask", response_model=Answer)
-def ask(
+async def ask(
     req: AskRequest,
     agent: Annotated[Agent, Depends(get_agent)],
     st: Annotated[Any, Depends(store)] = None,
+    channel: Annotated[Any, Depends(get_doc_channel)] = None,
 ) -> Answer:
     # 刷新页面/重启服务后，用库里最后一次的表名回填上下文，追问才不会断
     if st.available() and not agent.context_tables(req.session_id):
@@ -39,6 +43,10 @@ def ask(
             agent.seed_context(req.session_id, tables=tables)
 
     answer = agent.ask(req.text, session_id=req.session_id, mode=req.mode)
+
+    # 文档通道（M3-04）：只往 background 与 tool_calls 里加东西，**结论一个字不动**
+    if req.with_docs:
+        answer = await with_document_background(answer, req.text, channel)
 
     if st.available():
         try:

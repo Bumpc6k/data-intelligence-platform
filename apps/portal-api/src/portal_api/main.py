@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from lineage_client import LineageClient
 
 from . import store
-from .routers import agent, audit, health, knowledge, lineage, reports
+from .routers import agent, audit, doc_channel, health, knowledge, lineage, reports
 
 settings = load_settings()
 
@@ -53,6 +53,7 @@ app.include_router(reports.router, prefix="/api")
 app.include_router(lineage.router, prefix="/api")
 app.include_router(audit.router, prefix="/api")
 app.include_router(knowledge.router, prefix="/api")
+app.include_router(doc_channel.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])
