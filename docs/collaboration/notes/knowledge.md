@@ -247,6 +247,7 @@ curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_q
 | 依赖注入点不清理 | 假 store 会泄漏到后面的真库用例（#9 踩过） | fixture 里 `app.dependency_overrides.pop(...)` |
 | 库层约束与外键的报错顺序 | 用不存在的 `candidate_id` 造数据，可能先撞外键而不是 `CHECK`，测试断言就跑偏 | 造数据先建真候选，再撞要验的那条约束 |
 | **依赖注入点被绕过** | 测试里换掉假 store，代码却直接引用了模块级的 `version_store` → **偷偷打到真库**，用例假绿 | 注入对象**一路传参**到底（`_gather_conflicts(vs, cs, ...)`），别在函数体里直接引用模块 |
+| 新增注入点后没补老用例 | 老用例只替换了 `store`，新增的 `versions_store` / `conflicts_store` 落到真模块上 → **CI 没有数据库，直接红**（本地有库时反而看不出来） | 加注入点的那个 PR 里，把所有"用假 store 的用例"一起补上；本地用 `DIP_PG_DSN=...127.0.0.1:1/dip pytest` 模拟无库环境跑一遍 |
 | 冲突项写进 jsonb 时带上 `datetime` | `TypeError: Object of type datetime is not JSON serializable`（口径行有 `created_at`） | 整理成冲突项时把时间转 ISO 字符串（`_as_text`） |
 | SQL 里 `%s is null` 的占位符 | `IndeterminateDatatype: could not determine data type of parameter $3`（`None` 推断不出类型） | 显式转型：`%s::bigint is null or id <> %s::bigint` |
 

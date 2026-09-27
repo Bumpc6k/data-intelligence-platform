@@ -180,6 +180,23 @@ class _FakeStore:
         return [{"id": 99, "subject": "ads.ads_产销存月报.output_qty"}]
 
 
+class _NoConflicts:
+    """没有生效口径、也没有竞争候选 —— 这个文件里的用例不关心冲突（M3-03 / #14）。
+
+    #14 给提交/审批加了冲突检查，也就多了两个依赖注入点；**替换掉假 store 的用例必须一起补上**，
+    否则会绕过注入点打到真库（CI 上没有数据库，直接红 —— 这个坑真踩过）。
+    """
+
+    def available(self) -> bool:
+        return True
+
+    def active_metric(self, subject: str) -> dict | None:
+        return None
+
+    def pending_candidates(self, subject: str, **_: Any) -> list[dict]:
+        return []
+
+
 @pytest.fixture()
 def fake_client():
     """依赖注入点被换成假 store 的客户端。
@@ -189,11 +206,15 @@ def fake_client():
     from portal_api.main import app
 
     def _make(**kwargs: Any) -> TestClient:
-        app.dependency_overrides[knowledge_router.store] = lambda: _FakeStore(**kwargs)
+        fake = _FakeStore(**kwargs)
+        app.dependency_overrides[knowledge_router.store] = lambda: fake
+        app.dependency_overrides[knowledge_router.versions_store] = _NoConflicts
+        app.dependency_overrides[knowledge_router.conflicts_store] = _NoConflicts
         return TestClient(app)
 
     yield _make
-    app.dependency_overrides.pop(knowledge_router.store, None)
+    for dep in (knowledge_router.store, knowledge_router.versions_store, knowledge_router.conflicts_store):
+        app.dependency_overrides.pop(dep, None)
 
 
 def test_提交被拒时逐条说明原因(fake_client):

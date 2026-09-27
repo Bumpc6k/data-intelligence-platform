@@ -1,7 +1,7 @@
 =========== Issue #14（M3-03）冲突仲裁 · 验收证据 ===========
-验证日期：2026-09-27 12:37:40 CST　被测分支：feat/m3-03-conflicts　HEAD：22de6f4
+验证日期：2026-09-27 12:41:21 CST　被测分支：feat/m3-03-conflicts　HEAD：7ca282f
 环境：WSL Ubuntu-22.04 + PostgreSQL 16 :15432 + portal-api :18100
-本轮标记：kc123740
+本轮标记：kc124121
 
 =========== 0. 环境就绪（幂等）===========
     dip-pg 已在运行
@@ -15,42 +15,42 @@
       "knowledge_candidates_intent_chk" CHECK (intent = ANY (ARRAY['new'::text, 'replace'::text]))
 
 =========== 2. 准备：先把公式 A 入成 v1 ===========
-  入库结果：metric_id 475
+  入库结果：metric_id 579
   当前生效：v1  产量 = 打码量 + 跳码量 - 重码量
 
 =========== 3. **验收①：冲突候选被拒并列出冲突项** ===========
 --- 3.1 提交公式 B（与生效口径 v1 不同，未声明替换）---
-  请求摘要：subject=ads.ads_产销存月报.kc123740a  formula=产量 = SUM(chanliang_qty)  intent=new
+  请求摘要：subject=ads.ads_产销存月报.kc124121a  formula=产量 = SUM(chanliang_qty)  intent=new
   HTTP 409
   {
     "success": false,
     "error": "conflict_with_active_metric",
     "message": "同一口径不能并存两条不同公式（《双人分工》§3.3）——必须择一：先把冲突那条处理掉（审核驳回），或者用 POST /api/knowledge/conflicts/resolve 仲裁；若是要替换现有口径，重新提交时声明 intent=replace。",
-    "subject": "ads.ads_产销存月报.kc123740a",
+    "subject": "ads.ads_产销存月报.kc124121a",
     "conflicts": [
       {
         "kind": "metric",
-        "id": 475,
-        "subject": "ads.ads_产销存月报.kc123740a",
+        "id": 579,
+        "subject": "ads.ads_产销存月报.kc124121a",
         "formula": "产量 = 打码量 + 跳码量 - 重码量",
         "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
         "source_line": 1,
         "status": "active",
         "version": 1,
         "who": "么慌",
-        "at": "2026-09-27T04:37:44.054744+00:00"
+        "at": "2026-09-27T04:41:25.508525+00:00"
       }
     ]
   }
 
 --- 3.2 冲突的这次**没有留下 pending 残渣**（候选池里只有已入库那条）---
-  候选 #655  status=ingested  intent=new      formula=产量 = 打码量 + 跳码量 - 重码量
+  候选 #796  status=ingested  intent=new      formula=产量 = 打码量 + 跳码量 - 重码量
   当前生效：v1  产量 = 打码量 + 跳码量 - 重码量
 
 --- 3.3 与**未决候选**冲突同样被拦（第一条 pending 还没审，第二条就提不进来）---
   第二条（哪怕声明 replace）→ HTTP 409
   error=conflict_with_pending_candidate
-    冲突项：候选 #656  产量 = 打码量 + 跳码量 - 重码量  提交人=么慌  状态=pending
+    冲突项：候选 #797  产量 = 打码量 + 跳码量 - 重码量  提交人=么慌  状态=pending
 
 =========== 4. 出路二：声明 intent=replace（谁认的账留痕）===========
 --- 4.1 另一条路：把 S2 那条未决候选留下（keep_candidate_id；没有别的竞争候选，所以驳回列表为空）---
@@ -58,17 +58,17 @@
     "success": true,
     "kept": {
       "kind": "candidate",
-      "id": 656,
+      "id": 797,
       "formula": "产量 = 打码量 + 跳码量 - 重码量"
     },
     "rejected_candidate_ids": [],
     "active_version": null
   }
 --- 4.2 回到 S1：声明 replace 提交公式 B，冲突清单留在候选行上 ---
-  候选 #657  intent=replace  status=pending
-    留痕的冲突项：kind=metric v1  产量 = 打码量 + 跳码量 - 重码量  谁=么慌  何时=2026-09-27T04:37:44.054744+00:00
+  候选 #798  intent=replace  status=pending
+    留痕的冲突项：kind=metric v1  产量 = 打码量 + 跳码量 - 重码量  谁=么慌  何时=2026-09-27T04:41:25.508525+00:00
 --- 4.3 审批 + 入库 → 成为 v2（历史保留）---
-  入库：metric_id=476  候选状态=ingested
+  入库：metric_id=580  候选状态=ingested
   v2  active       产量 = SUM(chanliang_qty)
   v1  superseded   产量 = 打码量 + 跳码量 - 重码量
 
@@ -76,33 +76,33 @@
 --- 5.1 现状：S1 生效 v2，再提一条公式 C 的候选（声明 replace）→ 全景应显示冲突 ---
   {
     "success": true,
-    "subject": "ads.ads_产销存月报.kc123740a",
+    "subject": "ads.ads_产销存月报.kc124121a",
     "conflict": true,
     "active": [
       {
         "kind": "metric",
-        "id": 476,
-        "subject": "ads.ads_产销存月报.kc123740a",
+        "id": 580,
+        "subject": "ads.ads_产销存月报.kc124121a",
         "formula": "产量 = SUM(chanliang_qty)",
         "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
         "source_line": 1,
         "status": "active",
         "version": 2,
         "who": "么慌",
-        "at": "2026-09-27T04:37:44.496151+00:00"
+        "at": "2026-09-27T04:41:25.959217+00:00"
       }
     ],
     "pending": [
       {
         "kind": "candidate",
-        "id": 658,
-        "subject": "ads.ads_产销存月报.kc123740a",
+        "id": 799,
+        "subject": "ads.ads_产销存月报.kc124121a",
         "formula": "产量 = 打码量 * 1.0",
         "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
         "source_line": 1,
         "status": "pending",
         "who": "小王",
-        "at": "2026-09-27T04:37:44.566963+00:00",
+        "at": "2026-09-27T04:41:26.031298+00:00",
         "intent": "replace"
       }
     ]
@@ -116,7 +116,7 @@
       "formula": "产量 = 打码量 + 跳码量 - 重码量"
     },
     "rejected_candidate_ids": [
-      658
+      799
     ],
     "active_version": 1
   }
@@ -136,9 +136,9 @@
     v2 rolled_back  related=1  么慌  冲突仲裁：复核脚本后确认只有第 1 版与脚本一致，另外两条公式无据，退回 v1
     v1 reactivated  related=2  么慌  
   候选池台账（被驳回的候选也留着，带仲裁理由）：
-    候选 #658  rejected   冲突仲裁：复核脚本后确认只有第 1 版与脚本一致，另外两条公式无据，退回 v1
-    候选 #657  ingested   
-    候选 #655  ingested   
+    候选 #799  rejected   冲突仲裁：复核脚本后确认只有第 1 版与脚本一致，另外两条公式无据，退回 v1
+    候选 #798  ingested   
+    候选 #796  ingested   
   生效版本条数（库层不变量：同一口径至多一条 active）：
     count=1
 
@@ -147,8 +147,8 @@
   两个都想留 HTTP 400  missing_decision | 必须且只能指定一个落选项：keep_candidate_id（留候选）或 keep_version（留某一版）
   缺仲裁人 HTTP 400  missing_operator | 缺仲裁人：是人在做这个决定
   缺理由    HTTP 400  missing_reason | 仲裁必须写明理由（为什么留这条、为什么驳回那条）
-  版本不存在 HTTP 404  version_not_found | 口径 ads.ads_产销存月报.kc123740a 没有第 99 版
-  候选不存在 HTTP 404  candidate_not_found | 候选 #999999 不在 ads.ads_产销存月报.kc123740a 的未决候选里
+  版本不存在 HTTP 404  version_not_found | 口径 ads.ads_产销存月报.kc124121a 没有第 99 版
+  候选不存在 HTTP 404  candidate_not_found | 候选 #999999 不在 ads.ads_产销存月报.kc124121a 的未决候选里
 
 =========== 7. 库层拦什么、接口拦什么（如实说明）===========
   库层不变量（任何写入路径都拦得住）：
@@ -161,11 +161,11 @@
     · 不会导致两条生效版本（入库仍受库层不变量约束）；
     · 会被 GET /api/knowledge/conflicts 暴露，并可用仲裁收敛。
   --- 演示：直接写库塞一条竞争候选，全景立刻显示冲突 ---
-    659
+    800
     INSERT 0 1
     conflict=True
-    未决候选：#656 产量 = 打码量 + 跳码量 - 重码量 提交人=么慌
-    未决候选：#659 产量 = A - B 提交人=绕过接口的人
+    未决候选：#797 产量 = 打码量 + 跳码量 - 重码量 提交人=么慌
+    未决候选：#800 产量 = A - B 提交人=绕过接口的人
 
 =========== 8. 门禁 ===========
   ........................................................................ [ 22%]
@@ -176,21 +176,15 @@
      ✅ PASS
   
   GATE: ALL_PASS
-  19 passed in 2.71s
-  6 passed, 13 deselected in 2.73s
-  全量：317 passed, 1 skipped in 10.98s
+  19 passed in 2.72s
+  6 passed, 13 deselected in 2.70s
+  全量：317 passed, 1 skipped in 10.94s
 
 =========== 9. 边界核对 ===========
   --- 本次工作区改动清单 ---
-   M apps/portal-api/src/portal_api/routers/knowledge.py
    M docs/collaboration/notes/knowledge.md
-   M packages/dip-contracts/src/dip_contracts/knowledge.py
-   M packages/dip-pg/src/dip_pg/__init__.py
-   M packages/dip-pg/src/dip_pg/knowledge.py
-   M tests/test_metric_versions.py
-  ?? docs/evidence/issue-14-conflicts.txt
-  ?? packages/dip-pg/src/dip_pg/conflicts.py
-  ?? tests/test_conflicts.py
+   M docs/evidence/issue-14-conflicts.txt
+   M tests/test_knowledge_candidates.py
   --- 冻结资产与既有文件（dip_pg/store.py、lineage-client、dip-contracts 既有文件）---
   （无输出 = 一个字都没动）
   --- 既有表列数（sessions/messages/audit_log/firewall_judgments 不该变）---
