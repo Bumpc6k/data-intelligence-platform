@@ -1,0 +1,38 @@
+# dsh 壳接我们的血缘 skill（工作项 M4-02 / Issue #18）
+#
+# 这份文件是**模板**：`ops/dsh-connect.sh` 会把标记块整段并进
+#   $DSH_HOME/profiles/*/cordis.patch.yml
+# （dsh 明说"编辑 cordis.patch.yml，不要改 cordis.yml"；每个 profile 的配置各管各的：
+#   `web` 一个、`headless` 一个，**不共享** —— 所以脚本对每个 profile 都写一遍。）
+#
+# 为什么走 streamable-http 而不是 stdio：
+#   dsh 跑在 Windows（Node），我们的 skill 跑在 WSL（Python，仓库的 venv 是 Linux venv）。
+#   让 Windows 去 WSL 里起一个 stdio 子进程要走 `wsl.exe` 套壳，链路又长又难查错；
+#   改成 skill 直接监听一个口，dsh 按 HTTP 连 —— WSL 与 Windows 在 mirrored 网络模式下
+#   **共享 loopback**，所以 127.0.0.1:18360 两边是通的。
+#
+# 写法要点（踩过）：新增插件必须裹在 **`insert:` 列表**里，不能直接把行写进数组顶格——
+#   顶格行是"按 id 覆盖已有行"，目标不存在时 dsh 只打一句 warning 然后什么都不做（静默无效）。
+#   参考 `packages/bundle/base/cordis.patch.yml` 的写法。
+#
+# 工具名会变成 `mcp__lineage__lineage_analyze`（MCP 客户端统一加前缀，避免多服务撞名）。
+#
+# >>> dip-lineage-mcp（本块由 ops/dsh-connect.sh 生成，可重复运行） >>>
+- insert:
+    - id: mcp-lineage
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: lineage
+        transport: streamable-http
+        url: http://127.0.0.1:18360/mcp
+        # 单次工具调用的上限：内核血缘查询是本地库，正常几毫秒；给 60 秒是防内核冷启动
+        toolCallTimeoutMs: 60000
+        # false = skill 没起来时**外壳照常可用**（只是没这个工具），错误写进日志。
+        # 演示失败路径靠这个：不让一个外部依赖把整个壳拖死。
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 500
+          maxDelayMs: 30000
+          maxAttempts: 10
+# <<< dip-lineage-mcp <<<
