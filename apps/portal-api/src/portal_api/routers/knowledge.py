@@ -159,7 +159,7 @@ def submit_candidate(
         )
 
     conflicts = _gather_conflicts(vs, cs, draft.subject, draft.formula)
-    error, items = blocking_conflicts(draft.intent, conflicts)
+    error, items = blocking_conflicts(draft.intent, conflicts, draft.tier)
     blocked = _reject_on_conflict(error, items, draft.subject)
     if blocked is not None:
         return blocked
@@ -175,6 +175,10 @@ def submit_candidate(
         intent=draft.intent,
         # 声明替换时把"和谁冲突"留痕（谁认的账比"替换了"更重要）
         conflicts=[*conflicts["active"], *conflicts["pending"]],
+        # 等级与定级依据（ADR-0006 / #38）：**p2 免仲裁也要留痕**——不拦 ≠ 不记
+        tier=draft.tier,
+        tier_reason=draft.tier_reason,
+        tier_set_by=draft.tier_set_by,
         note=draft.note,
         submitted_by=draft.submitted_by,
     )
@@ -257,7 +261,7 @@ def review_candidate(
             return _json(status_code=404, content={"success": False, "error": "candidate_not_found",
                                                    "message": f"候选 #{candidate_id} 不存在"})
         conflicts = _gather_conflicts(vs, cs, row["subject"], row.get("formula"), exclude_candidate_id=candidate_id)
-        error, items = blocking_conflicts(row.get("intent"), conflicts)
+        error, items = blocking_conflicts(row.get("intent"), conflicts, row.get("tier"))
         blocked = _reject_on_conflict(error, items, row["subject"])
         if blocked is not None:
             return blocked

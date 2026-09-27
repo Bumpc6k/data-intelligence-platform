@@ -1,0 +1,79 @@
+
+===== 0. ADR 已就位（动手前必须先有 ADR —— Issue #38 的边界） =====
+-rwxrwxrwx 1 root root 4665 Sep 27 21:32 docs/adr/0006-metric-tier.md
+    # ADR-0006：口径分级（`tier`）——低等级免仲裁，但**不降质量门禁**
+    
+    - 状态：**已采纳**（2026-09-27，源自 Issue #38；设计取舍由助手提出，需求方复核后可调）
+    - 相关：工作项 #12（候选池与审核流）、#13（版本与回滚）、#14（冲突仲裁）、#38（本 ADR 的来源）
+    - 依据：需求方原话「以后这些口径可能是分级的，低等级的不需要仲裁。」
+    
+    ## 背景
+    
+
+===== 1. 契约层的等级规则（词汇表 / p2 必须有依据与定级人） =====
+  KNOWN_TIERS = ('p0', 'p1', 'p2') | 默认 = p1 | 免仲裁档 = p2
+    tier='p1'   依据=False 定级人=False → ['（合格）']
+    tier='p7'   依据=False 定级人=False → ['invalid_tier']
+    tier='p2'   依据=False 定级人=False → ['missing_tier_reason', 'missing_tier_setter']
+    tier='p2'   依据=True 定级人=False → ['missing_tier_setter']
+    tier='p2'   依据=True 定级人=True → ['（合格）']
+
+===== 2. 真 HTTP：先让一条口径生效（p1，正常流程） =====
+  提交 p1（公式 A）→ HTTP 201
+   候选 id = 1278
+  审核 approve → HTTP 200
+  入库 → HTTP 200
+
+===== 3. 真 HTTP：同一个新公式，p1 被拦、p2 放行（同一句话，只有等级不同） =====
+  --- p1：提交公式 B（与生效的公式 A 不同）---
+   HTTP 409
+   error = conflict_with_active_metric | 冲突项 = 1
+     · metric 指标 = 甲 + 乙
+  --- p2（带依据与定级人）：同一份请求体，只改等级 ---
+   HTTP 201
+   candidate.id = 1279 | tier = p2 | 定级人 = 么慌
+   依据 = 只影响临时分析，无下游引用
+   冲突留痕 = 1 条（**不拦 ≠ 不记**：放行也把"和谁公式不同"写在候选行上）
+     · metric 指标 = 甲 + 乙
+
+===== 4. p2 也要过质量门禁（免仲裁 ≠ 免门禁） =====
+  --- ① 标了 p2 但没写依据与定级人 ---
+   HTTP 400
+   error = invalid_candidate | problems = ['missing_tier_reason', 'missing_tier_setter']
+  --- ② 依据与定级人都写了，但**没有来源脚本**（质量门禁）---
+   HTTP 400
+   error = invalid_candidate | problems = ['missing_source_script']
+   → 免仲裁只放宽冲突拦截，质量门禁一条没放松
+
+===== 5. 库层：绕过接口直接写 p2（没有依据 / 乱填等级）都要被拦住 =====
+  直接写 p2 无依据 → ok = False | CheckViolation: new row for relation "knowledge_candidates" violates check constraint "knowledge_candidates_ti
+  直接写 tier=p7  → ok = False | CheckViolation: new row for relation "knowledge_candidates" violates check constraint "knowledge_candidates_ti
+
+===== 6. 入库把等级带进口径行（口径行上的 tier 是快照，不随版本变） =====
+  审核 approve → HTTP 200
+  入库 → HTTP 200
+  口径库里的版本：
+    v2 status=active     tier=p2 formula=指标 = 甲 + 乙 - 丙
+    v1 status=superseded tier=p1 formula=指标 = 甲 + 乙
+  候选行留痕：tier=p2 定级人=么慌 依据=只影响临时分析，无下游引用
+
+===== 7. 高等级仍然拦得住（把 #14 的用例按等级跑一遍 + 本次新增用例） =====
+.......................................                                  [100%]
+
+===== 8. 门禁（ruff + pytest + node --test） =====
+== lint（ruff）
+   ✅ PASS
+== 测试（pytest）
+   ✅ PASS
+== 视图注册表（node --test）
+   ✅ PASS
+GATE: ALL_PASS
+
+===== 9. 边界核对 =====
+ M apps/portal-api/src/portal_api/routers/knowledge.py
+ M packages/dip-contracts/src/dip_contracts/knowledge.py
+ M packages/dip-pg/src/dip_pg/knowledge.py
+ M packages/dip-pg/src/dip_pg/metric_versions.py
+?? docs/adr/0006-metric-tier.md
+?? tests/test_metric_tier.py
+  --- 冻结资产（应无输出）---
