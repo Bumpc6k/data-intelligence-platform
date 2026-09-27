@@ -23,6 +23,10 @@
 | `POST /api/knowledge/candidates/{id}/review` | 责任人审核 | `reviewer` 必填；`reject` 必带 `reason`；`approve` 必须显式给 `worth_keeping`（`false` 配 `approve` 视为自相矛盾） |
 | `POST /api/knowledge/candidates/{id}/ingest` | 入库 | 只有 `approved` 能入库；入库前**再校验一遍**；无来源 → `409` + `problems` |
 | `GET /api/knowledge/metrics` | 已入库的口径 | 验收就看这个："到底进没进去" |
+| `GET /api/knowledge/metrics/active` | **当前按哪一版算** | 平台侧的 `/kb/metric`；没有生效版本时明说没有 |
+| `GET /api/knowledge/metrics/versions` | 某口径的全部版本 | 历史不删（含被取代、被回滚的） |
+| `GET /api/knowledge/metrics/history` | 版本事件流水 | 谁、何时、从哪版到哪版、为什么 |
+| `POST /api/knowledge/metrics/rollback` | 回滚到指定版本 | 必须记名 + 写原因；不存在 → 404，已生效 → 409 |
 
 `problems` 里的错误码：`missing_source_script` / `invalid_source_script` / `missing_formula` /
 `invalid_formula` / `missing_depends_on` / `invalid_depends_on` / `missing_subject` / `invalid_subject` /
@@ -77,30 +81,103 @@ knowledge_candidates_reject_reason_chk
 source_script / source_line / note / submitted_by / status / reviewer / worth_keeping /
 rejected_reason / ingested_by / ingested_at / problems(jsonb)` + 时间戳。
 
-`knowledge_metrics`（入库落点，13 列）：多一个 `candidate_id`（外键指回候选，**入库的口径永远能追回它的候选与审核人**）
-和 `version`（先固定 1；版本与回滚是 #13）。
+`knowledge_metrics`（入库落点，16 列）：多一个 `candidate_id`（外键指回候选，**入库的口径永远能追回它的候选与审核人**）、
+`version`（同一 `subject` 内自增）与 `status`（`active` / `superseded` / `rolled_back`），
+以及回滚留痕三列 `rolled_back_at` / `rolled_back_by` / `rollback_reason`（#13 加）。
+
+`knowledge_metric_history`（版本事件流水，9 列）：`metric_id / subject / version / event /
+related_version / actor / reason / created_at`（#13 加，就是 Issue 说的「历史表」）。
 
 字段形状对齐内核 `/kb/metric` 的口径记录（`metric_name`/`formula`/`depends_on[{table,column}]`/`source_file`），
 这样将来把平台侧口径喂回内核的离线 `kb build` 时不用做字段翻译。
 
-## 5. 怎么验
+## 5. 版本与回滚（M3-02 / #13）
+
+### 版本号规则
+
+- **同一口径主体内自增**：第 n 次入库就是第 n 版（`version = max(version) + 1`，按 `subject` 分组）。
+- **同一时刻只有一个生效版本**：`create unique index uq_kb_metrics_one_active on knowledge_metrics(subject) where status = 'active'`
+  —— 库层不变量。任何"两条同时生效"的写法（含直接 `psql`）都会当场被拒。
+- **不删历史**：旧版本降级为 `superseded`，被回滚下来的版本标 `rolled_back`。
+
+### 回滚是"状态翻转"，不是"新增一版"
+
+```
+v1（superseded） ← 曾生效
+v2（active）     ← 现在生效
+        ↓ POST /api/knowledge/metrics/rollback {subject, to_version: 1, operated_by, reason}
+v1（active）     ← 生效的仍是原来那条 v1（不是"内容等于 v1 的 v3"）
+v2（rolled_back，带 rolled_back_at / rolled_back_by / rollback_reason）
+```
+
+理由：版本号是给人看的"这是第几版口径"，插一个内容重复的新版本会让版本号失去意义；
+"什么时候回滚的"由历史表回答，信息一点没少。而**入库**（每次都是新口径）与**回滚**（换回旧口径）
+是两种不同的变更，所以用两种机制表达。
+
+回滚必须写明"谁、为什么" —— 接口层拦一道，库层 `knowledge_metrics_rollback_trace_chk` 再钉一道
+（与"拒绝必须说明原因"同一条道理）。
+
+### 历史表 `knowledge_metric_history`
+
+每次版本状态变化一行：`entered`（进版生效）/ `superseded`（被新版本取代）/
+`rolled_back`（被回滚降级）/ `reactivated`（因回滚重新生效），带 `actor`、`related_version`、`reason`。
+
+```
+$ psql -c "select version, event, related_version, actor, reason from knowledge_metric_history \
+           where subject='ads.ads_产销存月报.xxx' order by id"
+ 1 | entered       |   | 么慌 |                       ← 第 1 版入库
+ 2 | entered       |   | 么慌 |                       ← 第 2 版入库
+ 1 | superseded    | 2 | 么慌 |                       ← 第 1 版被第 2 版取代
+ 2 | rolled_back   | 1 | 么慌 | 新公式与脚本对不上      ← 第 2 版被回滚（为什么）
+ 1 | reactivated   | 2 | 么慌 |                       ← 第 1 版重新生效
+```
+
+### 来源精度（ADR-0003）
+
+每条口径都带 `source: {script, line, precision, label}`：
+
+- `precision = "line"` → `examples/warehouse/ads/ads_产销存月报.sql 第 1 条语句`
+- `precision = "file"` → `examples/warehouse/ads/ads_产销存月报.sql（文件级：行号待补）`
+
+内核只给 `source_script`（没有行号）时就只能是**文件级**，标签里明说"行号待补"，
+不许含糊成"有来源"。
+
+### 与内核 `/kb/metric` 的联合验证
+
+平台侧的版本化口径不是自说自话：拿内核真实口径（`/kb/metric` 查 `chanliang_qty`）当基准，
+把同一条口径按同一公式与来源入库到平台侧，断言两边**公式、来源脚本、依赖字段**一致
+（`tests/test_metric_versions.py::test_与内核_kb_metric_对得上`，标 `smoke`；证据里也有一次真 HTTP 的并排输出）。
+
+差别也说清楚：内核侧是**只读基线**（无版本、无回滚），版本与回滚只发生在平台侧 ——
+把平台侧口径喂回内核的离线 `kb build` 要另开 Issue（内核是冻结资产，只按接口调用）。
+
+## 6. 怎么验
 
 ```bash
 bash ops/start-pg.sh && bash ops/start-portal.sh      # 起库与平台
 .venv/bin/python -m pytest -q tests/test_knowledge_candidates.py -rs   # 23 条（其中 8 条要真库）
+.venv/bin/python -m pytest -q tests/test_metric_versions.py -rs        # 12 条（其中 7 条要真库、1 条要内核）
 bash ops/gate.sh                                      # 必须 GATE: ALL_PASS
+bash ops/gate.sh --with-smoke                         # 带上真内核的冒烟（含与 /kb/metric 的联合验证）
 ```
 
-完整过程与原始输出（含三条反例、库层约束报错、门禁输出）：`docs/evidence/issue-12-candidates.txt`。
+完整过程与原始输出：`docs/evidence/issue-12-candidates.txt`（候选与入库）、
+`docs/evidence/issue-13-versions.txt`（版本与回滚）。
 
 手边一条命令走一遍（真 HTTP）：
 
 ```bash
+# 当前按哪一版算（平台侧的 /kb/metric）
 curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_qty" \
-  http://127.0.0.1:18100/api/knowledge/metrics
+  http://127.0.0.1:18100/api/knowledge/metrics/active
+# 版本历史与事件流水
+curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_qty" \
+  http://127.0.0.1:18100/api/knowledge/metrics/versions
+curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_qty" \
+  http://127.0.0.1:18100/api/knowledge/metrics/history
 ```
 
-## 6. 踩过的坑（写下来免得再踩）
+## 7. 踩过的坑（写下来免得再踩）
 
 | 坑 | 现象 | 正确做法 |
 | --- | --- | --- |
@@ -110,17 +187,18 @@ curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_q
 | 依赖注入点不清理 | 假 store 会泄漏到后面的真库用例（#9 踩过） | fixture 里 `app.dependency_overrides.pop(...)` |
 | 库层约束与外键的报错顺序 | 用不存在的 `candidate_id` 造数据，可能先撞外键而不是 `CHECK`，测试断言就跑偏 | 造数据先建真候选，再撞要验的那条约束 |
 
-## 7. 当前不支持的事（别指望它）
+## 8. 当前不支持的事（别指望它）
 
 - **不做审核台 UI**（Issue #12 的边界）—— 现在只有接口，`/app/` 前端没有候选页面。
-- **不做同字段冲突仲裁**（#14）：同 `subject` 提两条不同公式，目前两条都能入库。
-- **不做版本与回滚**（#13）：`version` 恒为 1，没有"回到上一版"。
+- **不做同字段冲突仲裁**（#14）：同 `subject` 提两条不同公式，目前两条都能入库（会各自成为一版）。
+- **不做全量知识库迁移**（Issue #13 的边界）：只有人工/流水线提交的候选会进库，内核的 75 条口径不自动搬过来。
+- **回滚只回"哪一版生效"，不回滚候选**：候选池是按次提交的事实，不因为口径回滚而改变状态。
 - **`term` / `rule` 两类候选显式拒绝**（`unsupported_kind`）—— 不是悄悄当口径处理。
-- **审核不加身份认证**：`reviewer` 是调用方自报的字符串（`auth_mode=dev` 阶段就是这样，身份体系不在本轮范围）。
-- 入库**不写回内核知识库**：这一版先落平台侧口径库（`knowledge_metrics`），
+- **审核与回滚不加身份认证**：`reviewer` / `operated_by` 是调用方自报的字符串（`auth_mode=dev` 阶段就是这样）。
+- 入库**不写回内核知识库**：先落平台侧口径库（`knowledge_metrics`），
   喂回内核的离线构建要另开 Issue（内核是冻结资产，只按接口调用）。
 
-## 8. 谁负责
+## 9. 谁负责
 
 - 流程与口径质量：**责任人（么慌）** —— `worth_keeping` 与拒绝原因都出自这里。
 - 代码与测试：AI 起草（Hermes Agent），提交人逐行复核后才算完成。

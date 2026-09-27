@@ -1,4 +1,4 @@
-"""知识候选池接口（工作项 M3-01 / Issue #12）：候选 → 审核 → 入库。
+"""知识候选池接口（工作项 M3-01 / Issue #12；版本与回滚是 M3-02 / #13）：候选 → 审核 → 入库。
 
 一条口径想进知识库，只能走这三步：
 
@@ -7,6 +7,15 @@ POST /api/knowledge/candidates             提交候选（必须带 来源脚本
 POST /api/knowledge/candidates/{id}/review 责任人审核（approve / reject，reject 必须说明原因）
 POST /api/knowledge/candidates/{id}/ingest 入库（只有已批准、且**再校验一遍**通过的才进得去）
 GET  /api/knowledge/metrics                看得见"到底进没进去"
+```
+
+入库之后（M3-02 / #13）还能查版本、回滚：
+
+```
+GET  /api/knowledge/metrics/active?subject=...   当前按哪一版算（平台侧的 /kb/metric）
+GET  /api/knowledge/metrics/versions?subject=... 全部版本（历史不删）
+GET  /api/knowledge/metrics/history?subject=...  版本事件流水（谁、何时、从哪版到哪版、为什么）
+POST /api/knowledge/metrics/rollback            回滚到指定版本（必须记名 + 写原因）
 ```
 
 三层防护，各管一段（这是本 Issue 的设计要点，不是重复劳动）：
@@ -27,9 +36,11 @@ from dip_contracts.knowledge import (
     CandidateDraft,
     draft_from_row,
     problems_as_dicts,
+    source_ref,
     validate_draft,
 )
 from dip_pg import knowledge as knowledge_store
+from dip_pg import metric_versions as version_store
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -245,6 +256,11 @@ def ingest_candidate(
 # ---------------------------------------------------------------- 口径库（看"进没进去"）
 
 
+def _with_source(row: dict) -> dict:
+    """给口径行补上**来源展示**（ADR-0003：有行号说行号，没有就标"文件级"）。"""
+    return {**row, "source": source_ref(row.get("source_script"), row.get("source_line")).model_dump()}
+
+
 @router.get("/knowledge/metrics")
 def list_metrics(
     subject: Annotated[str | None, Query(max_length=200)] = None,
@@ -253,4 +269,101 @@ def list_metrics(
 ) -> dict:
     if not st.available():
         return {"success": False, "error": "数据库不可用（未落库）", "items": []}
-    return {"success": True, "items": st.list_metrics(subject=subject, limit=limit)}
+    return {"success": True, "items": [_with_source(row) for row in st.list_metrics(subject=subject, limit=limit)]}
+
+
+# ---------------------------------------------------------------- 口径版本与回滚（M3-02 / #13）
+
+
+def versions_store() -> Any:
+    """依赖注入点：版本与回滚（测试可覆盖，不连数据库）。"""
+    return version_store
+
+
+@router.get("/knowledge/metrics/active")
+def active_metric(
+    subject: Annotated[str, Query(min_length=1, max_length=200)],
+    st: Annotated[Any, Depends(versions_store)] = None,
+) -> dict:
+    """当前生效版本 —— 平台侧的 `/kb/metric`：问一句"这个口径现在按哪一版算"。
+
+    没有生效版本时**明说没有**，不返回一个空壳让人以为"口径是空的"。
+    """
+    if not st.available():
+        return {"success": False, "error": "数据库不可用（未落库）", "metric": None}
+    row = st.active_metric(subject)
+    if row is None:
+        return {"success": True, "metric": None, "message": f"口径 {subject} 没有生效版本"}
+    return {"success": True, "metric": _with_source(row)}
+
+
+@router.get("/knowledge/metrics/versions")
+def list_versions(
+    subject: Annotated[str, Query(min_length=1, max_length=200)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    st: Annotated[Any, Depends(versions_store)] = None,
+) -> dict:
+    """某口径的全部版本（含被取代、被回滚的）—— 历史不删。"""
+    if not st.available():
+        return {"success": False, "error": "数据库不可用（未落库）", "items": []}
+    return {"success": True, "items": [_with_source(row) for row in st.list_versions(subject, limit=limit)]}
+
+
+@router.get("/knowledge/metrics/history")
+def metric_history(
+    subject: Annotated[str, Query(min_length=1, max_length=200)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    st: Annotated[Any, Depends(versions_store)] = None,
+) -> dict:
+    """版本事件流水：谁在什么时候把哪一版换成了哪一版、为什么。"""
+    if not st.available():
+        return {"success": False, "error": "数据库不可用（未落库）", "items": []}
+    return {"success": True, "items": st.history(subject, limit=limit)}
+
+
+class RollbackRequest(BaseModel):
+    """回滚。`reason` 必填 —— 说不清原因的回滚与说不清原因的拒绝同样不可接受。"""
+
+    subject: str = ""
+    to_version: int = 0
+    operated_by: str = ""
+    reason: str = ""
+
+
+@router.post("/knowledge/metrics/rollback")
+def rollback_metric(
+    req: RollbackRequest,
+    st: Annotated[Any, Depends(versions_store)] = None,
+) -> Any:
+    """把某口径回滚到指定版本：**降级当前版本 + 目标版本重新生效 + 写两条历史**，同一个事务。
+
+    这一步只改"当前按哪一版算"，历史一行不删。回滚后 `GET /api/knowledge/metrics/active`
+    返回的就是目标版本（验收说的"回滚后 `/kb/metric` 返回上一版本"）。
+    """
+    if not req.subject.strip():
+        return _json(status_code=400, content={"success": False, "error": "missing_subject",
+                                               "message": "缺口径主体（回滚要说清是哪条口径）"})
+    if req.to_version < 1:
+        return _json(status_code=400, content={"success": False, "error": "invalid_version",
+                                               "message": f"目标版本号必须 ≥ 1，实际 {req.to_version}"})
+    if not req.operated_by.strip():
+        return _json(status_code=400, content={"success": False, "error": "missing_operator",
+                                               "message": "缺操作人：回滚要记名"})
+    if not req.reason.strip():
+        return _json(status_code=400, content={"success": False, "error": "missing_reason",
+                                               "message": "回滚必须写明原因（为什么退回这一版）"})
+    if not st.available():
+        return _json(status_code=503, content={"success": False, "error": "数据库不可用（未落库）"})
+
+    outcome = st.rollback(subject=req.subject.strip(), to_version=req.to_version,
+                          operated_by=req.operated_by, reason=req.reason)
+    if not outcome.ok:
+        code = 404 if outcome.error in (version_store.E_SUBJECT_NOT_FOUND, version_store.E_VERSION_NOT_FOUND) else 409
+        return _json(status_code=code, content={"success": False, "error": outcome.error,
+                                                "message": outcome.detail})
+    return {
+        "success": True,
+        "from_version": outcome.from_version,
+        "to_version": outcome.to_version,
+        "metric": _with_source(st.active_metric(req.subject.strip()) or {}),
+    }

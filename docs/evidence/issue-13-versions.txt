@@ -1,0 +1,229 @@
+=========== Issue #13（M3-02）口径版本与回滚 · 验收证据 ===========
+验证日期：2026-09-27 12:10:47 CST　被测分支：feat/m3-02-metric-versions　HEAD：77d7333
+环境：WSL Ubuntu-22.04（Python 3.10.12）+ PostgreSQL 16 :15432 + portal-api :18100 + 内核 :18080
+本轮标记：kv121047
+
+=========== 0. 环境就绪（幂等）===========
+    dip-pg 已在运行
+  portal-api : http://127.0.0.1:18100/api/health
+  前端 + 后端: http://127.0.0.1:18100/app/    ← 打开这个提问就有反馈
+  {"platform":"ok","kernel":{"ok":true,"base_url":"http://127.0.0.1:18080","ms":2,"error":null},"mode":"rule","auth_mode":"dev"}
+
+=========== 1. 库层：版本列、不变量索引、历史表 ===========
+   version         | integer                  |           | not null | 1
+   status          | text                     |           | not null | 'active'::text
+   rolled_back_at  | timestamp with time zone |           |          | 
+   rolled_back_by  | text                     |           |          | 
+   rollback_reason | text                     |           |          | 
+      "idx_kb_metrics_subject" btree (subject, version DESC)
+      "uq_kb_metrics_one_active" UNIQUE, btree (subject) WHERE status = 'active'::text
+  Check constraints:
+      "knowledge_metrics_rollback_trace_chk" CHECK (status <> 'rolled_back'::text OR rolled_back_at IS NOT NULL AND COALESCE(btrim(rolled_back_by), ''::text) <> ''::text AND COALESCE(btrim(rollback_reason), ''::text) <> ''::text)
+      "knowledge_metrics_status_chk" CHECK (status = ANY (ARRAY['active'::text, 'superseded'::text, 'rolled_back'::text]))
+      "knowledge_metrics_version_chk" CHECK (version >= 1)
+  --- 同一口径只能有一个生效版本（partial unique index）---
+          indexname         |                                                            indexdef                                                            
+  --------------------------+--------------------------------------------------------------------------------------------------------------------------------
+   uq_kb_metrics_one_active | CREATE UNIQUE INDEX uq_kb_metrics_one_active ON public.knowledge_metrics USING btree (subject) WHERE (status = 'active'::text)
+  (1 row)
+  
+  --- 历史表 ---
+   event           | text                     |           | not null | 
+   related_version | integer                  |           |          | 
+   actor           | text                     |           | not null | 
+   reason          | text                     |           |          | 
+  Check constraints:
+      "knowledge_metric_history_event_chk" CHECK (event = ANY (ARRAY['entered'::text, 'superseded'::text, 'rolled_back'::text, 'reactivated'::text]))
+      "knowledge_metric_history_reason_chk" CHECK (event <> 'rolled_back'::text OR COALESCE(btrim(reason), ''::text) <> ''::text)
+
+=========== 2. 正例：同一口径入两版，旧版自动降级 ===========
+  第 1 版入库（公式 A：打码量 + 跳码量 - 重码量）：213 ingested
+  第 2 版入库（公式 B：SUM(chanliang_qty)）：      214 ingested
+  --- 当前生效版本（GET /api/knowledge/metrics/active）---
+  {
+    "success": true,
+    "metric": {
+      "id": 214,
+      "candidate_id": 307,
+      "subject": "ads.ads_产销存月报.kv121047",
+      "chinese_name": "产量",
+      "formula": "产量 = SUM(chanliang_qty)",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "dama_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "source_line": 2,
+      "version": 2,
+      "status": "active",
+      "approved_by": "么慌",
+      "note": "验收：kv121047b",
+      "created_at": "2026-09-27T04:10:51.161245Z",
+      "rolled_back_at": null,
+      "rolled_back_by": null,
+      "rollback_reason": null,
+      "source": {
+        "script": "examples/warehouse/ads/ads_产销存月报.sql",
+        "line": 2,
+        "precision": "line",
+        "label": "examples/warehouse/ads/ads_产销存月报.sql 第 2 条语句"
+      }
+    }
+  }
+  --- 全部版本 ---
+  v2  active       产量 = SUM(chanliang_qty)   来源：examples/warehouse/ads/ads_产销存月报.sql 第 2 条语句
+  v1  superseded   产量 = 打码量 + 跳码量 - 重码量   来源：examples/warehouse/ads/ads_产销存月报.sql 第 1 条语句
+  --- 版本事件流水（history）---
+  v1  entered      related=None  么慌  
+  v1  superseded   related=2  么慌  
+  v2  entered      related=None  么慌  
+
+=========== 3. **核心验收：回滚后口径查询返回上一版本** ===========
+--- 3.1 回滚到第 1 版 ---
+  {
+    "success": true,
+    "from_version": 2,
+    "to_version": 1,
+    "metric": {
+      "id": 213,
+      "candidate_id": 306,
+      "subject": "ads.ads_产销存月报.kv121047",
+      "chinese_name": "产量",
+      "formula": "产量 = 打码量 + 跳码量 - 重码量",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "dama_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "source_line": 1,
+      "version": 1,
+      "status": "active",
+      "approved_by": "么慌",
+      "note": "验收：kv121047a",
+      "created_at": "2026-09-27T04:10:51.051700Z",
+      "rolled_back_at": null,
+      "rolled_back_by": null,
+      "rollback_reason": null,
+      "source": {
+        "script": "examples/warehouse/ads/ads_产销存月报.sql",
+        "line": 1,
+        "precision": "line",
+        "label": "examples/warehouse/ads/ads_产销存月报.sql 第 1 条语句"
+      }
+    }
+  }
+--- 3.2 回滚后再查当前生效版本 ---
+  version=1  status=active
+  formula=产量 = 打码量 + 跳码量 - 重码量
+  来源   =examples/warehouse/ads/ads_产销存月报.sql 第 1 条语句  （precision=line）
+--- 3.3 版本台账与历史（回滚本身也留痕）---
+   version |   status    | 回滚人 |                        回滚原因                        
+  ---------+-------------+--------+--------------------------------------------------------
+         1 | active      | -      | -
+         2 | rolled_back | 么慌   | 第 2 版公式与脚本对不上（脚本是 打码量+跳码量-重码量）
+  (2 rows)
+  
+  v1  entered      related=None  么慌  
+  v1  superseded   related=2  么慌  
+  v2  entered      related=None  么慌  
+  v2  rolled_back  related=1  么慌  第 2 版公式与脚本对不上（脚本是 打码量+跳码量-重码量）
+  v1  reactivated  related=2  么慌  
+--- 3.4 历史一行没删（版本行数 = 2）---
+  行数=2
+
+=========== 4. 反例：回滚的四类拒绝，各自的错误码 ===========
+  缺原因  HTTP 400  missing_reason | 回滚必须写明原因（为什么退回这一版）
+  缺操作人 HTTP 400  missing_operator | 缺操作人：回滚要记名
+  版本不存在 HTTP 404  version_not_found | 口径 ads.ads_产销存月报.kv121047 没有第 9 版
+  已经生效 HTTP 409  already_active | 第 1 版已经是生效版本，无需回滚
+  口径不存在 HTTP 404  subject_not_found | 口径 ads.ads_产销存月报.根本没有这条 没有任何版本，无从回滚
+
+=========== 5. 反例：绕过接口直接改库，两个不变量都拦得住 ===========
+  --- 5.1 让两条同时生效（应撞唯一索引）---
+  ERROR:  duplicate key value violates unique constraint "uq_kb_metrics_one_active"
+  DETAIL:  Key (subject)=(ads.ads_产销存月报.kv121047) already exists.
+  --- 5.2 造一次「没有留痕的回滚」（应撞 CHECK）---
+  ERROR:  new row for relation "knowledge_metrics" violates check constraint "knowledge_metrics_rollback_trace_chk"
+  DETAIL:  Failing row contains (213, 306, ads.ads_产销存月报.kv121047, 产量, 产量 = 打码量 + 跳码量 - 重码量, [{"table": "cdw.dwd_卷烟产量码段明细", "column": "dama_q..., examples/warehouse/ads/ads_产销存月报.sql, 1, 1, rolled_back, 么慌, 验收：kv121047a, 2026-09-27 04:10:51.0517+00, null, null, null).
+  --- 5.3 被拦之后状态没变 ---
+   version |   status    
+  ---------+-------------
+         1 | active
+         2 | rolled_back
+  (2 rows)
+  
+
+=========== 6. 来源精度：有行号说行号，没有就标「文件级」 ===========
+  --- 提交时没给行号 → 来源标「文件级」 ---
+  source.precision=file  label=examples/warehouse/ads/ads_产销存月报.sql（文件级：行号待补）
+  --- 给了行号的那条（上面第 1 版）---
+  source.precision=line  label=examples/warehouse/ads/ads_产销存月报.sql 第 1 条语句
+
+=========== 7. 与内核 /kb/metric 的联合验证 ===========
+--- 7.1 内核侧真返回（POST /kb/metric {"name":"chanliang_qty"}）---
+  subject      = cdw.dwd_卷烟产量码段明细.chanliang_qty
+  formula      = 产量 = 打码量 + 跳码量 - 重码量
+  source_file  = examples/knowledge_demo/cdw/dwd_卷烟产量码段明细.sql  source_stmt=1
+  depends_on   = [('ods.ods_卷烟码段流水', 'chongma_qty'), ('ods.ods_卷烟码段流水', 'dama_qty'), ('ods.ods_卷烟码段流水', 'tiaoma_qty')]
+--- 7.2 把同一条口径按内核的公式与来源入库到平台侧 ---
+  入库结果（metric_id status）：216 ingested
+--- 7.3 平台侧当前生效版本（GET /api/knowledge/metrics/active）---
+  subject      = cdw.dwd_卷烟产量码段明细.chanliang_qty  (v14 active)
+  formula      = 产量 = 打码量 + 跳码量 - 重码量
+  source       = examples/knowledge_demo/cdw/dwd_卷烟产量码段明细.sql 第 1 条语句  precision=line
+  depends_on   = [('ods.ods_卷烟码段流水', 'chongma_qty'), ('ods.ods_卷烟码段流水', 'dama_qty'), ('ods.ods_卷烟码段流水', 'tiaoma_qty')]
+
+  对齐结论：公式一致=True  来源脚本一致=True  依赖字段覆盖内核=True
+  差异说明：内核侧是只读基线（无 version / 无回滚）；版本与回滚只发生在平台侧。
+
+=========== 8. 门禁 ===========
+  --- 全量 ---
+  ........................................................................ [ 24%]
+  ........................................................................ [ 48%]
+  ........................................................................ [ 72%]
+  ........................................................................ [ 96%]
+  .........s.                                                              [100%]
+     ✅ PASS
+  
+  GATE: ALL_PASS
+  --- 带上真内核冒烟（含与 /kb/metric 的联合验证用例）---
+  ...s.                                                                    [100%]
+  =========================== short test summary info ============================
+  SKIPPED [1] integrations/lineage-client/tests/test_live_smoke.py:64: 未找到演示 SQL：把 LINEAGE_DEMO_SQL 指向内核仓库的 t_ads_产销存月报.sql（见 README 快速开始）
+     ✅ PASS
+  
+  GATE: ALL_PASS
+  --- 本 Issue 新用例计数 ---
+  12 passed in 3.01s
+  7 passed, 5 deselected in 3.03s
+
+=========== 9. 边界核对（既有文件与既有表没被动）===========
+  --- 本次工作区改动清单 ---
+   M apps/portal-api/src/portal_api/routers/knowledge.py
+   M docs/collaboration/notes/knowledge.md
+   M packages/dip-contracts/src/dip_contracts/knowledge.py
+   M packages/dip-pg/src/dip_pg/__init__.py
+   M packages/dip-pg/src/dip_pg/knowledge.py
+  ?? docs/evidence/issue-13-versions.txt
+  ?? packages/dip-pg/src/dip_pg/metric_versions.py
+  ?? tests/test_metric_versions.py
+  --- 冻结资产（integrations/lineage-client、dip-contracts 既有文件、dip_pg/store.py）---
+  （无输出 = 一个字都没动）
+  --- 既有表列数（sessions/messages/audit_log/firewall_judgments 不该变）---
+  audit_log 列数=14
+  firewall_judgments 列数=17
+  knowledge_candidates 列数=20
+  knowledge_metric_history 列数=9
+  knowledge_metrics 列数=16
+  messages 列数=6
+  sessions 列数=5
+
+=========== 10. 坑（本轮新踩到的）===========
+  1) 入库时**必须先降级旧版本、再插入新版本**：顺序反了会同时存在两条 active，
+     被 uq_kb_metrics_one_active 当场拒绝（事务里也一样，约束是立即检查的）。
+  2) 老库补列/换约束靠 create table if not exists 是补不上的（它对老库是 no-op），
+     必须在建表语句后追加 alter table ... add column if not exists / drop constraint if exists。

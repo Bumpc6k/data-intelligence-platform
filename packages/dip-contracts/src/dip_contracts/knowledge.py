@@ -259,3 +259,30 @@ def draft_from_row(row: dict[str, Any]) -> CandidateDraft:
 
 def problems_as_dicts(problems: list[Problem]) -> list[dict[str, str]]:
     return [p.model_dump() for p in problems]
+
+
+# ---------------------------------------------------------------- 来源精度（ADR-0003）
+
+
+class SourceRef(BaseModel):
+    """一条口径的来源。
+
+    ADR-0003 定的规矩：设计要求"精确到文件 + 行号"，但内核只给 `source_script`（没有行号）。
+    所以平台侧**有行号就说行号，没有行号就明说"文件级"** —— 不许把"文件级"含糊成"有来源"。
+    """
+
+    script: str | None = None
+    line: int | None = None
+    precision: str = "none"      # line / file / none
+    label: str = ""
+
+
+def source_ref(source_script: str | None, source_line: int | None) -> SourceRef:
+    """按来源脚本与行号给出**可展示**的来源，并标清精度。"""
+    script = (source_script or "").strip() or None
+    if script is None:
+        return SourceRef(precision="none", label="无来源（不许入库）")
+    if source_line is not None and source_line >= 1:
+        return SourceRef(script=script, line=source_line, precision="line",
+                         label=f"{script} 第 {source_line} 条语句")
+    return SourceRef(script=script, precision="file", label=f"{script}（文件级：行号待补）")
