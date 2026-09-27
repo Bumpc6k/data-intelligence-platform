@@ -269,3 +269,46 @@ curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_q
 - 流程与口径质量：**责任人（么慌）** —— `worth_keeping` 与拒绝原因都出自这里。
 - 代码与测试：AI 起草（Hermes Agent），提交人逐行复核后才算完成。
   按 `AGENTS.md` §6，合并由人来做。
+
+## 11. 口径分级：低等级免仲裁（ADR-0006 / Issue #38）
+
+需求方原话：「以后这些口径可能是分级的，低等级的不需要仲裁。」规矩写在
+[`docs/adr/0006-metric-tier.md`](../../adr/0006-metric-tier.md)，这里只讲怎么用、以及免的到底是哪一段。
+
+### 11.1 三个等级
+
+| 等级 | 谁该用 | 与仲裁的关系 |
+| --- | --- | --- |
+| `p0` | 进生产报表 / 对外口径 / 被下游引用 | 最严（与 `p1` 同，冲突一律先仲裁） |
+| `p1` | **默认**（不写就是它） | 与生效口径公式不同 → 必须 `intent=replace`；未决候选之间冲突 → 拦（#14 的老规矩） |
+| `p2` | 只影响临时分析、无下游引用 | **两类冲突都不拦**，但冲突清单照样写进候选行（不拦 ≠ 不记） |
+
+标 `p2` 必须同时给 `tier_reason`（凭什么说它低风险）与 `tier_set_by`（谁定的）——
+契约层与库层**双重把关**（`knowledge_candidates_tier_trace_chk`），绕过接口直接写库也拿不到免仲裁。
+
+### 11.2 免的只是"冲突拦截"，质量门禁一条没放松
+
+`p2` 仍然要过：来源脚本、依赖字段、审核人必填、reject 必写原因、approve 必答 `worth_keeping`、
+入库时的库层 `CHECK`。也就是说 **`p2` 不是"提交即入库"**，它免的是"先仲裁"，不是"免审核"
+（选这个取舍的理由：入库是个动作，要有责任人 `ingested_by` 与审核记录）。
+
+### 11.3 等级是人的判断，不版本化
+
+- 接口**没有**改等级的入口：`ReviewRequest` 里没有 `tier`（有用例钉住），审核/入库都不会动它；
+- 等级只在**提交候选**时由人写入，入库时作为**快照**落到口径行（`knowledge_metrics.tier`）；
+- 要改等级 = 重新提交一条候选（带新等级 + 依据 + 人）→ 自然留痕；
+- 等级变化**不改版本号**：版本描述的是口径内容（公式/依赖/来源），等级是运维元数据。
+
+### 11.4 怎么用（一句话）
+
+```bash
+# 临时分析用的派生指标：标 p2 就可以绕过"必须先仲裁"，但仍要走审核 + 入库
+curl -X POST http://127.0.0.1:18100/api/knowledge/candidates -H 'content-type: application/json' -d '{
+  "subject":"ads.ads_临时看板.x","chinese_name":"临时指标","formula":"x = a + b",
+  "depends_on":[{"table":"t","column":"c"}],
+  "source_script":"examples/warehouse/ads/ads_产销存月报.sql",
+  "tier":"p2","tier_reason":"只影响临时分析，无下游引用","tier_set_by":"么慌","submitted_by":"么慌"}'
+```
+
+证据：`docs/evidence/issue-38-tiers.txt`（真 HTTP + 真库：p1 拦、p2 放行并留痕、p2 缺依据被拒、
+库层两种绕过都拦下、等级随入库落到口径行）。

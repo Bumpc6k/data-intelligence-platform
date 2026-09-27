@@ -69,10 +69,22 @@ create table if not exists knowledge_candidates (
   ingested_at    timestamptz,
   ingested_by    text,
   problems       jsonb not null default '[]'::jsonb,   -- 被拒时逐条原因（码 + 说明），供审计回溯
+  tier           text not null default 'p1',           -- 口径等级（ADR-0006 / #38）：p0/p1/p2，**人的判断**
+  tier_reason    text,                                 -- 标 p2（免仲裁档）必填：凭什么说它低风险
+  tier_set_by    text,                                 -- 标 p2 必填：谁定的等级（审计要的是人）
   constraint knowledge_candidates_status_chk
     check (status in ('pending', 'approved', 'rejected', 'ingested')),
   constraint knowledge_candidates_kind_chk
     check (kind in ('metric', 'term', 'rule')),
+  constraint knowledge_candidates_tier_chk
+    check (tier in ('p0', 'p1', 'p2')),
+  -- 免仲裁不是白给的：**必须有人背书**（依据 + 定级人）。这条钉在库层，绕过接口改库也进不去
+  constraint knowledge_candidates_tier_trace_chk
+    check (
+      tier <> 'p2' or (
+        coalesce(btrim(tier_reason), '') <> '' and coalesce(btrim(tier_set_by), '') <> ''
+      )
+    ),
   -- 拒绝必须说明原因：说不清原因的拒绝不是审核，是拍脑袋
   constraint knowledge_candidates_reject_reason_chk
     check (status <> 'rejected' or coalesce(btrim(rejected_reason), '') <> ''),
@@ -90,12 +102,25 @@ create table if not exists knowledge_candidates (
 create index if not exists idx_kb_candidates_status on knowledge_candidates(status, submitted_at desc);
 create index if not exists idx_kb_candidates_subject on knowledge_candidates(subject);
 
--- 补列（已存在的库）：M3-01 建的候选表没有 intent / conflicts
-alter table knowledge_candidates add column if not exists intent    text not null default 'new';
-alter table knowledge_candidates add column if not exists conflicts jsonb not null default '[]'::jsonb;
+-- 补列（已存在的库）：M3-01 建的候选表没有 intent / conflicts；#38 起多三列等级留痕
+alter table knowledge_candidates add column if not exists intent      text not null default 'new';
+alter table knowledge_candidates add column if not exists conflicts   jsonb not null default '[]'::jsonb;
+alter table knowledge_candidates add column if not exists tier        text not null default 'p1';
+alter table knowledge_candidates add column if not exists tier_reason text;
+alter table knowledge_candidates add column if not exists tier_set_by text;
 alter table knowledge_candidates drop constraint if exists knowledge_candidates_intent_chk;
 alter table knowledge_candidates add  constraint knowledge_candidates_intent_chk
   check (intent in ('new', 'replace'));
+alter table knowledge_candidates drop constraint if exists knowledge_candidates_tier_chk;
+alter table knowledge_candidates add  constraint knowledge_candidates_tier_chk
+  check (tier in ('p0', 'p1', 'p2'));
+alter table knowledge_candidates drop constraint if exists knowledge_candidates_tier_trace_chk;
+alter table knowledge_candidates add  constraint knowledge_candidates_tier_trace_chk
+  check (
+    tier <> 'p2' or (
+      coalesce(btrim(tier_reason), '') <> '' and coalesce(btrim(tier_set_by), '') <> ''
+    )
+  );
 """
 
 METRIC_SCHEMA = """
@@ -113,6 +138,7 @@ create table if not exists knowledge_metrics (
   approved_by   text not null,
   note          text,
   created_at    timestamptz not null default now(),
+  tier          text not null default 'p1',           -- 等级快照（ADR-0006 / #38）：随候选入库落下来，**不随版本变**
   rolled_back_at   timestamptz,                      -- 被回滚降级的时间（谁、为什么见下面两列）
   rolled_back_by   text,
   rollback_reason  text,
@@ -138,10 +164,14 @@ create table if not exists knowledge_metrics (
 create index if not exists idx_kb_metrics_subject on knowledge_metrics(subject, version desc);
 create index if not exists idx_kb_metrics_candidate on knowledge_metrics(candidate_id);
 
--- 补列（已存在的库）：M3-01 建的表没有回滚留痕三列
+-- 补列（已存在的库）：M3-01 建的表没有回滚留痕三列；#38 起多一列等级快照
 alter table knowledge_metrics add column if not exists rolled_back_at  timestamptz;
 alter table knowledge_metrics add column if not exists rolled_back_by  text;
 alter table knowledge_metrics add column if not exists rollback_reason text;
+alter table knowledge_metrics add column if not exists tier            text not null default 'p1';
+alter table knowledge_metrics drop constraint if exists knowledge_metrics_tier_chk;
+alter table knowledge_metrics add  constraint knowledge_metrics_tier_chk
+  check (tier in ('p0', 'p1', 'p2'));
 -- 状态值域扩容（M3-01 只有 active/rolled_back）：先删后加，保证幂等
 alter table knowledge_metrics drop constraint if exists knowledge_metrics_status_chk;
 alter table knowledge_metrics add  constraint knowledge_metrics_status_chk
@@ -183,13 +213,14 @@ create index if not exists idx_kb_metric_history_subject on knowledge_metric_his
 
 CANDIDATE_COLUMNS = (
     "id, kind, subject, chinese_name, formula, depends_on, source_script, source_line, intent, conflicts, "
+    "tier, tier_reason, tier_set_by, "
     "note, submitted_by, submitted_at, status, reviewer, reviewed_at, review_reason, worth_keeping, "
     "rejected_reason, ingested_at, ingested_by, problems"
 )
 
 METRIC_COLUMNS = (
     "id, candidate_id, subject, chinese_name, formula, depends_on, source_script, source_line, "
-    "version, status, approved_by, note, created_at, rolled_back_at, rolled_back_by, rollback_reason"
+    "version, status, approved_by, note, created_at, tier, rolled_back_at, rolled_back_by, rollback_reason"
 )
 
 
@@ -232,6 +263,9 @@ def record_candidate(
     source_line: int | None = None,
     intent: str = "new",
     conflicts: list[dict[str, Any]] | None = None,
+    tier: str = "p1",
+    tier_reason: str = "",
+    tier_set_by: str = "",
     note: str = "",
     problems: list[dict[str, str]] | None = None,
 ) -> Persisted:
@@ -240,17 +274,22 @@ def record_candidate(
 
     ``intent`` / ``conflicts``（M3-03 / #14）：候选自己声明的意图，以及提交那一刻"和谁冲突"的清单 ——
     声明 `replace` 时冲突清单照样要留痕，因为"这次替换是谁认的账"比"替换了"更重要。
+
+    ``tier`` / ``tier_reason`` / ``tier_set_by``（ADR-0006 / #38）：口径等级是**人的判断**。
+    标 `p2`（免仲裁档）时库层 `knowledge_candidates_tier_trace_chk` 要求依据与定级人都在 ——
+    绕过接口直接写库也拿不到免仲裁。
     """
     return _write(
         """insert into knowledge_candidates
               (kind, subject, chinese_name, formula, depends_on, source_script, source_line,
-               intent, conflicts, note, submitted_by, problems)
-            values (%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb) returning id""",
+               intent, conflicts, tier, tier_reason, tier_set_by, note, submitted_by, problems)
+            values (%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s::jsonb) returning id""",
         (
             kind, subject, chinese_name, formula,
             json.dumps(depends_on or [], ensure_ascii=False),
             source_script, source_line, intent,
             json.dumps(conflicts or [], ensure_ascii=False),
+            tier, tier_reason, tier_set_by,
             note, submitted_by,
             json.dumps(problems or [], ensure_ascii=False),
         ),
@@ -388,9 +427,9 @@ def ingest(*, candidate_id: int, ingested_by: str, problems: list[dict[str, str]
             cur.execute(
                 """insert into knowledge_metrics
                       (candidate_id, subject, chinese_name, formula, depends_on, source_script,
-                       source_line, version, status, approved_by, note)
+                       source_line, version, status, approved_by, note, tier)
                     select id, subject, chinese_name, formula, depends_on, source_script,
-                           source_line, %s, 'active', %s, note
+                           source_line, %s, 'active', %s, note, tier
                       from knowledge_candidates where id = %s
                     returning id""",
                 (version, ingested_by, candidate_id),

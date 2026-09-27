@@ -39,7 +39,7 @@ EVENTS = (EVENT_ENTERED, EVENT_SUPERSEDED, EVENT_ROLLED_BACK, EVENT_REACTIVATED)
 
 METRIC_COLUMNS = (
     "id, candidate_id, subject, chinese_name, formula, depends_on, source_script, source_line, "
-    "version, status, approved_by, note, created_at, rolled_back_at, rolled_back_by, rollback_reason"
+    "version, status, approved_by, note, created_at, rolled_back_at, rolled_back_by, rollback_reason, tier"
 )
 
 HISTORY_COLUMNS = "id, subject, version, event, related_version, actor, reason, created_at, metric_id"

@@ -27,9 +27,16 @@ from pydantic import BaseModel, Field
 #: 而不是静默当成 metric 处理（认不出的类型必须报错，AGENTS §3 铁律 1）。
 SUPPORTED_KINDS: tuple[str, ...] = ("metric",)
 KNOWN_KINDS: tuple[str, ...] = ("metric", "term", "rule")
-
 #: 提交意图（M3-03 / #14）：`new` = 新口径；`replace` = 替换现有生效口径（冲突清单留痕）
 KNOWN_INTENTS: tuple[str, ...] = ("new", "replace")
+
+#: 口径等级（ADR-0006 / Issue #38）：**人的判断**，不是系统推断。
+#: `p0` 生产报表/对外口径（最严）；`p1` 默认；`p2` 只影响临时分析、无下游引用（免仲裁）。
+KNOWN_TIERS: tuple[str, ...] = ("p0", "p1", "p2")
+#: **默认从严**：想免仲裁必须有人明确标 `p2` 并写明依据。
+DEFAULT_TIER: str = "p1"
+#: 免仲裁的那一档（只放宽"冲突拦截"，不放松任何质量门禁）
+FREE_ARBITRATION_TIER: str = "p2"
 
 #: 来源脚本必须是仓库里的脚本文件（内核的 `source_file` 就是这种形状：
 #: `examples/warehouse/ads/ads_产销存月报.sql`）。挡掉"来源：我脑子里"这类填法。
@@ -78,6 +85,13 @@ class CandidateDraft(BaseModel):
     #: 提交意图（M3-03 / #14）：`new` = 新口径（与现有口径冲突就要先仲裁）；
     #: `replace` = 人明说"这是替换现有生效口径"（冲突清单仍会留痕，但要有人认账）
     intent: str = "new"
+    #: 口径等级（ADR-0006 / #38）：`p0 | p1 | p2`，默认 `p1`。
+    #: `p2` = 免仲裁档，必须同时给 `tier_reason` 与 `tier_set_by`（谁说的、凭什么）。
+    tier: str = DEFAULT_TIER
+    #: 标 `p2` 的依据（人写的，不是系统算的）
+    tier_reason: str = ""
+    #: 谁定的等级（审计要的是人）
+    tier_set_by: str = ""
     note: str = ""
     submitted_by: str = ""
 
@@ -135,6 +149,33 @@ def validate_draft(draft: CandidateDraft) -> list[Problem]:
     | `submitted_by` | 必填 | 候选要有人负责 |
     """
     problems: list[Problem] = []
+
+    # 等级（ADR-0006 / #38）：认不出的等级必须报错；标 p2（免仲裁）**必须**有依据和定级人
+    if draft.tier not in KNOWN_TIERS:
+        problems.append(
+            Problem(
+                code="invalid_tier",
+                field="tier",
+                message=f"认不出的口径等级：{draft.tier!r}（可选 {'/'.join(KNOWN_TIERS)}）",
+            )
+        )
+    elif draft.tier == FREE_ARBITRATION_TIER:
+        if _blank(draft.tier_reason):
+            problems.append(
+                Problem(
+                    code="missing_tier_reason",
+                    field="tier_reason",
+                    message=f"标 {FREE_ARBITRATION_TIER}（免仲裁）必须写明依据：凭什么说它低风险",
+                )
+            )
+        if _blank(draft.tier_set_by):
+            problems.append(
+                Problem(
+                    code="missing_tier_setter",
+                    field="tier_set_by",
+                    message=f"标 {FREE_ARBITRATION_TIER}（免仲裁）必须写明谁定的等级（审计要的是人）",
+                )
+            )
 
     if draft.intent not in KNOWN_INTENTS:
         problems.append(
@@ -271,6 +312,9 @@ def draft_from_row(row: dict[str, Any]) -> CandidateDraft:
         source_script=row.get("source_script"),
         source_line=row.get("source_line"),
         intent=row.get("intent") or "new",
+        tier=row.get("tier") or DEFAULT_TIER,
+        tier_reason=row.get("tier_reason") or "",
+        tier_set_by=row.get("tier_set_by") or "",
         note=row.get("note") or "",
         submitted_by=row.get("submitted_by") or "",
     )
@@ -375,12 +419,20 @@ def detect_conflicts(
     return {"active": active, "pending": pending}
 
 
-def blocking_conflicts(intent: str | None, conflicts: dict[str, list[dict[str, Any]]]) -> tuple[str | None, list[dict[str, Any]]]:
-    """按候选声明的 `intent` 判断"该不该拦"，返回 (错误码, 冲突项)。
+def blocking_conflicts(
+    intent: str | None,
+    conflicts: dict[str, list[dict[str, Any]]],
+    tier: str | None = None,
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """按候选声明的 `intent` 与**等级**判断"该不该拦"，返回 (错误码, 冲突项)。
 
     - 与**未决候选**冲突：一律拦 —— 两条竞争候选同时待审，就是"没择一"。
     - 与**生效口径**冲突：只有 `intent='replace'`（人明说"这是替换"）才放行。
+    - **`tier='p2'`（免仲裁档，ADR-0006 / #38）**：上面两条都不再拦 ——
+      但仍由调用方把冲突清单记在候选行上（不拦 ≠ 不记）。低等级口径的风险由定级人背书。
     """
+    if (tier or DEFAULT_TIER) == FREE_ARBITRATION_TIER:
+        return None, []
     if conflicts["pending"]:
         return CONFLICT_WITH_PENDING, conflicts["pending"]
     if conflicts["active"] and (intent or "new") != "replace":
