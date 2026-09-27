@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 SESSION=portal-api
 PORT="${PORTAL_PORT:-18100}"
-EXPORT_PATH="PYTHONPATH=$ROOT/apps/portal-api/src:$ROOT/packages/dip-contracts/src:$ROOT/packages/dip-core/src:$ROOT/packages/dip-agent/src:$ROOT/integrations/lineage-client/src"
+EXPORT_PATH="PYTHONPATH=$ROOT/apps/portal-api/src:$ROOT/packages/dip-contracts/src:$ROOT/packages/dip-core/src:$ROOT/packages/dip-agent/src:$ROOT/integrations/lineage-client/src:$ROOT/packages/dip-pg/src"
 
 if [ "${1:-start}" = "stop" ]; then
   tmux has-session -t "$SESSION" 2>/dev/null && tmux kill-session -t "$SESSION" && echo "已停 $SESSION" || echo "$SESSION 未在运行"

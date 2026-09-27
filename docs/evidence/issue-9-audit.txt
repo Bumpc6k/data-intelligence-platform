@@ -1,0 +1,47 @@
+=== 0) 起依赖：PG / portal-api / 防火墙 ===
+  dip-pg 已在运行
+  portal-api :18100 → HTTP 200
+  防火墙 :18210 → db_available=True  策略指纹=be734a993ada
+  本轮标记 actor=验收-113544（便于在历史记录里认出这四条）
+
+=== 1) 四次判定（自动 / 审批 / 拒绝 / 令牌）===
+  ① 只读   tier=auto      disposition=auto_pass         matched=True  已落库=True
+  ② 生产写 tier=approval  disposition=require_approval  matched=True  已落库=True
+  ③ 破坏性 tier=deny      disposition=reject            matched=True  已落库=True
+  ④ 令牌   （审批人=组长 签发 → 用它校验一次）
+     校验 → HTTP 200
+
+=== 2) 验收核心：这四次判定在 /api/audit/judgments 里查得到 ===
+  success=True
+  本轮的记录 5 条：
+    #90 [判定] select    tier=auto      处置=auto_pass         命中=True 指纹=0a0996857b43fed0
+           依据：read-only(auto)：只读查询不改数据，自动通过
+           当时的策略：v1 指纹 be734a993ada   时间：2026-09-27T03:35:44.463803Z
+    #91 [判定] insert    tier=approval  处置=require_approval  命中=True 指纹=fd247e24277e19cc
+           依据：production-write(approval)：生产库（prod/ads/dwd/dws/cdw）上的写操作需要审批
+           当时的策略：v1 指纹 be734a993ada   时间：2026-09-27T03:35:44.487569Z
+    #92 [判定] truncate  tier=deny      处置=reject            命中=True 指纹=52180ec56b3b0ff8
+           依据：destructive-ddl(deny)：破坏性操作（truncate/drop）不可审批，直接拒绝
+           当时的策略：v1 指纹 be734a993ada   时间：2026-09-27T03:35:44.512034Z
+    #93 [令牌] insert    事件=issued    审批人=组长
+           原因：审批通过，签发令牌（审批人=组长）   时间：2026-09-27T03:35:44.542120Z
+    #94 [令牌] insert    事件=verified  审批人=None
+           原因：ok   时间：2026-09-27T03:35:44.567944Z
+
+=== 3) 只新增表，不动既有三张表（Issue 边界）===
+    audit_log              列数=14
+    firewall_judgments     列数=17  ← 本次新增
+    messages               列数=6
+    sessions               列数=5
+  portal_api/store.py 有没有被改（既有表结构定义在它里面）：
+  （无输出 = 一个字都没动）
+
+=== 4) 反例：数据库不可用时，判定不受影响但要明说未落库 ===
+  /health：db_available=False（服务照常起来了）
+  判定一个破坏性动作 → tier=deny disposition=reject（判定照常给出）
+  已落库=False  未落库原因=OperationalError: connection failed: connection to server at "127.0.0.1", port 1 failed: server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+=== 5) 还原 ===
+  防火墙 :18210 db_available=True

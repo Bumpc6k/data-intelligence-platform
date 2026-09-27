@@ -15,7 +15,9 @@ TTL="${FIREWALL_TOKEN_TTL_SECONDS:-300}"
 # 环境变量必须**内联进 tmux 的命令行**：tmux 开新会话用的是它自己那个服务器进程的环境，
 # 不继承调用方 export 出来的变量。只 export 不内联的话，FIREWALL_POLICY / FIREWALL_TOKEN_TTL_SECONDS
 # 会被**静默忽略**（写错也不报错，看起来一切正常）——这正是我们要避免的失效方式。
-INLINE="PYTHONPATH=$ROOT/apps/firewall/src FIREWALL_POLICY=$POLICY FIREWALL_TOKEN_TTL_SECONDS=$TTL"
+INLINE="PYTHONPATH=$ROOT/apps/firewall/src:$ROOT/packages/dip-pg/src FIREWALL_POLICY=$POLICY FIREWALL_TOKEN_TTL_SECONDS=$TTL"
+# DIP_PG_DSN 只在你显式设了的时候才转发（没设就用 dip_pg 里的默认 DSN，别在这里抄一份）。
+if [ -n "${DIP_PG_DSN:-}" ]; then INLINE="$INLINE DIP_PG_DSN=$DIP_PG_DSN"; fi
 
 if [ "${1:-start}" = "stop" ]; then
   tmux has-session -t "$SESSION" 2>/dev/null && tmux kill-session -t "$SESSION" && echo "已停 $SESSION" || echo "$SESSION 未在运行"
