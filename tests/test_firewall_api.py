@@ -116,6 +116,49 @@ def test_verify_requires_a_token(client: TestClient):
     assert client.post("/judge", json={"actor": "x"}).status_code == 422
 
 
+class _FakeClock:
+    def __init__(self, now: float = 1_700_000_000.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def test_expired_token_is_rejected_over_http(monkeypatch: pytest.MonkeyPatch):
+    """时效也走接口验一遍：过期后同一张令牌被拒（用假时钟，不真的等 5 分钟）。"""
+    from firewall import main as firewall_main
+    from firewall.tokens import DEFAULT_TTL_SECONDS, TokenStore
+
+    clock = _FakeClock()
+    monkeypatch.setattr(firewall_main, "tokens", TokenStore(clock=clock))
+    client = TestClient(app)
+
+    def issue_and_payload():
+        issued = client.post(
+            "/tokens/issue",
+            json={"approver": "leader", "actor": "engineer", "action": "insert", "target": "ads.t"},
+        ).json()
+        return {"token": issued["token"], "action": "insert", "target": "ads.t"}
+
+    fresh = issue_and_payload()
+    assert client.post("/verify", json=fresh).status_code == 200
+
+    stale = issue_and_payload()
+    clock.advance(DEFAULT_TTL_SECONDS + 1)
+    response = client.post("/verify", json=stale)
+    assert response.status_code == 403
+    assert "已过期" in response.json()["detail"]
+
+    # 时效可以配：环境变量一改，健康检查里就能看到
+    monkeypatch.setenv("FIREWALL_TOKEN_TTL_SECONDS", "60")
+    assert client.get("/health").json()["token_ttl_seconds"] == DEFAULT_TTL_SECONDS, (
+        "已构造好的 store 不该被环境变量影响（它是启动时读的）"
+    )
+
+
 def test_policy_change_takes_effect_and_shows_up_in_the_digest(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ):

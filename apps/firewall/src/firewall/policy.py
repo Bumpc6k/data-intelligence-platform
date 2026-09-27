@@ -53,16 +53,82 @@ def stricter(left: Tier, right: Tier) -> Tier:
     return left if SEVERITY[left] >= SEVERITY[right] else right
 
 
+def _collapse_whitespace_outside_quotes(text: str) -> str:
+    """把引号**外面**的连续空白折成一个空格；引号**里面**的原样保留。
+
+    为什么不能直接 `re.sub(r"\\s+", " ", sql)`：SQL 字符串字面量里的空白是有语义的，
+    `where name = '张 三'` 折成 `'张 三'` 看着一样，但 `'a  b'` 折成 `'a b'` 就**改了语义**。
+    审批人复制粘贴 SQL 时换行/缩进变来变去是常态，所以这里既要宽容（折外面的空白），
+    又不能宽容到把授权内容改掉（引号里一个字符都不碰）。
+
+    SQL 里 `''` 是转义的引号，也一并处理。
+    """
+    out: list[str] = []
+    in_quote = False
+    pending_space = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if in_quote:
+            out.append(char)
+            if char == "'":
+                if index + 1 < len(text) and text[index + 1] == "'":
+                    out.append("'")
+                    index += 2
+                    continue
+                in_quote = False
+            index += 1
+            continue
+        if char == "'":
+            in_quote = True
+            if pending_space and out:
+                out.append(" ")
+            pending_space = False
+            out.append(char)
+            index += 1
+            continue
+        if char.isspace():
+            pending_space = True
+            index += 1
+            continue
+        if pending_space and out:
+            out.append(" ")
+        pending_space = False
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def normalize_sql(sql: str) -> str:
+    """SQL 的规范化形式（进指纹前先过这里）。
+
+    - 去掉首尾空白与**结尾的分号**（`...;` 与 `...` 是同一句话）；
+    - 把引号外的连续空白折成一个空格（换行、缩进、Tab 都不算改动）；
+    - **不改大小写、不动引号内的任何字符** —— 标识符与字面量是大小写敏感的，
+      这里宁严勿松。
+    """
+    collapsed = _collapse_whitespace_outside_quotes(sql.strip())
+    return collapsed.rstrip(";").strip()
+
+
 def action_fingerprint(*, action: str, target: str | None = None, sql: str | None = None) -> str:
     """动作指纹：动作 + 目标 + SQL 规范化后取 sha256 前 16 位。
 
     绑指纹意味着：审批人对「这条 SQL 打这张表」的授权**不能挪用到别的动作上** ——
     改一个字符即失效。
 
-    注意：M2-01 这里只做 strip + 拼接（够用、可断言）；指纹的规范化规则
-    （大小写、空白、参数化）留给 M2-02 收紧。
+    规范化规则（M2-02 收紧，每一条都是为了让"人复制粘贴的差异"不算改动，
+    同时保证"内容的差异"一定算改动）：
+
+    | 部分 | 怎么规范化 | 为什么 |
+    | --- | --- | --- |
+    | `action` | 去空白 + **转小写** | 动作是词汇（`INSERT`/`insert` 同一件事） |
+    | `target` | 只去首尾空白，**保留大小写** | 表名可能大小写敏感，宁严勿松 |
+    | `sql` | `normalize_sql`（见上） | 换行/缩进/结尾分号不算改动；引号内一个字符都不碰 |
+
+    三段之间用 `\\x1f`（单元分隔符）拼接，避免"动作 + 目标"边界蹭在一起产生歧义。
     """
-    parts = [action.strip(), (target or "").strip(), (sql or "").strip()]
+    parts = [action.strip().lower(), (target or "").strip(), normalize_sql(sql or "")]
     return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:16]
 
 

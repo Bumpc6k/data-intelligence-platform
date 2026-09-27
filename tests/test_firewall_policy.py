@@ -225,6 +225,44 @@ def test_verdict_fingerprint_covers_the_sql(policy: Policy):
     assert first.tier is second.tier is Tier.APPROVAL
 
 
+def test_fingerprint_ignores_formatting_differences():
+    """M2-02：人复制粘贴带来的差异（换行、缩进、结尾分号）不算改动。
+
+    否则审批人批完、执行方从日志里复制出来多一个换行，就会被判"指纹不一致"而白批。
+    """
+    canonical = action_fingerprint(
+        action="insert", target="ads.t", sql="insert into ads.t select 1"
+    )
+    assert canonical == action_fingerprint(
+        action="insert", target="ads.t", sql="  insert into ads.t select 1  ;  "
+    )
+    assert canonical == action_fingerprint(
+        action="insert",
+        target="ads.t",
+        sql="insert into ads.t\n    select 1",
+    )
+    assert canonical == action_fingerprint(
+        action="  INSERT  ", target="ads.t", sql="insert into ads.t select 1"
+    ), "动作是词汇，大小写不该算改动"
+
+
+def test_fingerprint_preserves_whitespace_inside_string_literals():
+    """反例：引号**里面**的空白是有语义的，折了就等于改了授权内容。
+
+    这条是"规范化不能过头"的守卫 —— 无脑 `re.sub(r"\\s+", " ", sql)` 会在这里红。
+    """
+    one_space = action_fingerprint(action="insert", target="ads.t", sql="insert into ads.t values ('a b')")
+    two_spaces = action_fingerprint(action="insert", target="ads.t", sql="insert into ads.t values ('a  b')")
+    assert one_space != two_spaces
+
+
+def test_fingerprint_keeps_target_case_sensitive():
+    """表名可能大小写敏感：target 只去首尾空白，不折叠大小写。"""
+    lower = action_fingerprint(action="insert", target="ads.t")
+    upper = action_fingerprint(action="insert", target="ADS.T")
+    assert lower != upper
+
+
 def test_fingerprint_is_short_and_hex():
     value = action_fingerprint(action="select", target="ads.t")
     assert len(value) == 16

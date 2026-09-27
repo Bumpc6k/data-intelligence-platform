@@ -1,0 +1,56 @@
+Issue #8（M2-02 审批令牌：一次性 + 绑指纹 + 时效）验收证据
+===========================================================
+
+验证日期：2026-09-26
+被测分支：feat/m2-02-token（基于 feat/m2-01-firewall）
+环境：WSL Ubuntu-22.04（Python 3.10.12）
+服务：apps/firewall http://127.0.0.1:18210
+
+本文件是一条脚本的真实输出（原样粘贴，未编辑）：
+  脚本：bash /mnt/d/Projects/_fw-token-demo.sh
+
+覆盖：
+  ① 同一令牌第二次使用被拒（一次性）
+  ② 令牌跨动作不可用、改一个字符即失效；且"指纹不符的拒绝"不消费令牌
+  ③ 指纹规范化：多行 + 结尾分号 与 单行无分号 等价（复制粘贴的差异不算改动），
+     但改掉内容里的一个字符仍然失效
+  ④ 时效：把时效调成 3 秒起一个真进程，签发后 4 秒再用 → 403 已过期（不是只在单元测试里成立）
+  ⑤ 反例：FIREWALL_TOKEN_TTL_SECONDS 写错 → 服务**起不来**（ValueError），不静默按默认值跑
+
+说明：本 PR 是**堆叠 PR**，base 是 feat/m2-01-firewall（#30）。
+令牌代码只存在于 M2-01 引入的文件里，所以必须叠在它上面；等 #30 合并后本 PR 会自动改指 main。
+
+================================================================================
+
+=== 1) 起服务（默认 5 分钟时效）===
+  token_ttl_seconds=300  已签发=0  策略指纹=6bfcaadc1263
+
+=== 2) 验收①：同一令牌第二次使用被拒 ===
+  第一次 → {"ok":true,"reason":"ok"}HTTP 200 
+  第二次 → {"detail":"令牌已使用过（一次性，不允许复用；上次使用 actor=么慌）"}HTTP 403 
+
+=== 3) 验收②：令牌跨动作不可用（改一个字符即失效）===
+  换一个字符（select 1 → select 2）→ {"detail":"令牌与当前动作不匹配（指纹不一致：令牌是给另一个动作签的）"}HTTP 403 
+  原样再用一次（证明上一次的拒绝没有消费掉令牌）→ {"ok":true,"reason":"ok"}HTTP 200 
+
+=== 4) 指纹规范化：人复制粘贴的差异不算改动 ===
+  审批时给的 SQL（多行 + 结尾分号）：
+    | insert into ads.ads_产销存月报
+    |       select 1;
+  执行方用单行、无分号的等价 SQL 去用 → {"ok":true,"reason":"ok"}HTTP 200 
+  但把 SQL 里的一个字改掉（select 1 → select 2）→ {"detail":"令牌与当前动作不匹配（指纹不一致：令牌是给另一个动作签的）"}HTTP 403 
+
+=== 5) 实时效：把时效改成 3 秒，重启后同一张令牌过期即作废 ===
+  /health 读到 token_ttl_seconds = 3
+  刚签发就用 → {"ok":true,"reason":"ok"}HTTP 200 
+  等 4 秒（时效 3 秒）…
+  过期后用 → {"detail":"令牌已过期（签发于 4 秒前，时效 3 秒）"}HTTP 403 
+
+=== 6) 反例：时效环境变量写错 → 服务必须起不来（不静默按默认值跑）===
+    tokens = TokenStore(ttl_seconds=ttl_seconds())
+  File "/mnt/d/Projects/data-intelligence-platform/apps/firewall/src/firewall/tokens.py", line 38, in ttl_seconds
+    raise ValueError(f"FIREWALL_TOKEN_TTL_SECONDS 必须是整数，得到 {raw!r}") from exc
+ValueError: FIREWALL_TOKEN_TTL_SECONDS 必须是整数，得到 'soon'
+
+=== 7) 还原：默认时效重启 ===
+  token_ttl_seconds = 300
