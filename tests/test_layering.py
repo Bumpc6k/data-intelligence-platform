@@ -25,6 +25,7 @@ PKG_DIRS = {
     "dip_lineage_skill": ROOT / "packages/dip-lineage-skill/src/dip_lineage_skill",
     "dip_pg": ROOT / "packages/dip-pg/src/dip_pg",
     "dip_refine": ROOT / "packages/dip-refine/src/dip_refine",
+    "dip_docs": ROOT / "packages/dip-docs/src/dip_docs",
     "model_gateway": ROOT / "apps/model-gateway/src/model_gateway",
     "lineage_client": ROOT / "integrations/lineage-client/src/lineage_client",
     "portal_api": ROOT / "apps/portal-api/src/portal_api",
@@ -49,7 +50,10 @@ ALLOWED: dict[str, set[str]] = {
     "model_gateway": {"dip_core"},                # 网关只吃配置；不依赖契约层与上层
     "lineage_client": {"dip_contracts"},          # 适配器实现契约层的 KernelToolkit 协议
     "dip_agent": {"dip_contracts", "dip_core"},   # 只依赖协议，不依赖 httpx 适配器
-    "portal_api": {"dip_contracts", "dip_core", "dip_agent", "lineage_client", "dip_pg"},
+    "dip_docs": {                                 # 文档通道适配器：只依赖契约（DocHit 形状）
+        "dip_contracts",                          # 把 WeKnora 的返回收成契约层的 DocHit
+    },
+    "portal_api": {"dip_contracts", "dip_core", "dip_agent", "lineage_client", "dip_pg", "dip_docs"},
     "firewall": {"dip_pg"},                       # 判定要留痕：只借数据访问层，不碰业务代码
 }
 

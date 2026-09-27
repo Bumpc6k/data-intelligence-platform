@@ -42,6 +42,15 @@ class Settings:
     llm_rate_limit_per_min: int = 0  # 0 = 关闭（限流占位）
     # 报告代理：前端只看平台地址，不暴露内核内网地址
     report_proxy_enabled: bool = True
+    # 文档通道（M3-04 / Issue #15）：WeKnora 内置的 MCP Server。**只读**——
+    # 只开检索类工具（search_knowledge / list_documents），不开 ingest。
+    # 默认关闭：没配地址/令牌时通道整体不启用，接口明确告诉调用方"未启用"，不静默返回空。
+    docs_enabled: bool = False
+    docs_mcp_url: str | None = None  # 形如 http://127.0.0.1:18300/mcp/<endpoint_id>
+    docs_mcp_token: str | None = None
+    docs_kb_ids: tuple[str, ...] = ()
+    docs_timeout: float = 30.0
+    docs_top_k: int = 5
 
     @property
     def mode(self) -> str:
@@ -63,4 +72,10 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         llm_max_attempts=int(e.get("LLM_MAX_ATTEMPTS", "2")),
         llm_rate_limit_per_min=int(e.get("LLM_RATE_LIMIT_PER_MIN", "0")),
         report_proxy_enabled=e.get("REPORT_PROXY_ENABLED", "true").lower() == "true",
+        docs_enabled=e.get("DOCS_ENABLED", "false").lower() == "true",
+        docs_mcp_url=first_of(e, "WEKNORA_MCP_URL", "DOCS_MCP_URL"),
+        docs_mcp_token=first_of(e, "WEKNORA_MCP_TOKEN", "DOCS_MCP_TOKEN"),
+        docs_kb_ids=tuple(part.strip() for part in e.get("WEKNORA_KB_IDS", "").split(",") if part.strip()),
+        docs_timeout=float(e.get("WEKNORA_TIMEOUT", "30")),
+        docs_top_k=int(e.get("WEKNORA_TOP_K", "5")),
     )

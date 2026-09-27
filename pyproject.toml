@@ -37,6 +37,7 @@ pythonpath = [
   "packages/dip-agent/src",
   "packages/dip-skills/src",
   "packages/dip-refine/src",
+  "packages/dip-docs/src",
   "packages/dip-lineage-skill/src",
   "packages/dip-pg/src",
   "integrations/lineage-client/src",

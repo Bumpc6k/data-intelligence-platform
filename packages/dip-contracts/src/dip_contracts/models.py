@@ -91,6 +91,52 @@ class Result(BaseModel):
         return self
 
 
+class DocCitation(BaseModel):
+    """文档材料必须指得到的出处（M3-04 验收②：引用必须标注来源）。
+
+    形状对齐 WeKnora MCP 检索工具返回的引用字段（`knowledge_id` / `chunk_id` / `excerpt` / `url`），
+    但**不依赖**它 —— 换一家文档服务也只改 client，不动这里。
+    """
+
+    document_name: str = Field(default="", description="文档名（人认得出的那个）")
+    chunk_id: str = Field(default="", description="切片 id（能回到原文那一段）")
+    knowledge_id: str = Field(default="", description="文档 id（WeKnora 的 knowledge_id）")
+    knowledge_base_id: str = Field(default="", description="知识库 id")
+    url: str | None = Field(default=None, description="可点开的原文链接（有就给）")
+    position: str | None = Field(default=None, description="切片在原文里的位置（页码/序号，有就给）")
+
+    @property
+    def label(self) -> str:
+        """给人看的引用标签：`文档名#切片`（没有切片就说清楚没有）。"""
+        if self.document_name and self.chunk_id:
+            return f"{self.document_name}#{self.chunk_id}"
+        return self.document_name or self.chunk_id or "（未标注来源）"
+
+
+class DocHit(BaseModel):
+    """一条文档材料（一条切片）。`text` 是原文摘录，原样保留，不做改写。"""
+
+    text: str = ""
+    citation: DocCitation = Field(default_factory=DocCitation)
+    score: float | None = None
+
+
+class Background(BaseModel):
+    """文档通道的产出 —— **只能是背景**。
+
+    `usable_for_conclusion` 恒为 `False`，写成字段而不是靠约定：日志、界面、测试都能显式看到
+    "这段材料不允许进结论"。有人想改它，得先改这个类，改不了就藏不住。
+    """
+
+    hits: list[DocHit] = Field(default_factory=list)
+    channel: Literal["documents"] = "documents"
+    usable_for_conclusion: Literal[False] = False
+
+    @property
+    def citation_labels(self) -> list[str]:
+        return [hit.citation.label for hit in self.hits]
+
+
 class Answer(BaseModel):
     """一次问答的完整回答对象——前端渲染的唯一数据源（《设计说明书》§8）。"""
 
@@ -101,6 +147,9 @@ class Answer(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     mode: Literal["rule", "llm"] = "rule"
     audit_id: str | None = None
+    #: 文档通道（WeKnora）的背景材料。**只能挂这里**：不进 `result`、更不进 `result.evidence`
+    #: （见 `dip_contracts/doc_channel.py` 的「仅背景」铁律与 M3-04 / Issue #15）。
+    background: Background | None = None
 
     @model_validator(mode="after")
     def _suggestions_must_be_short(self) -> Answer:

@@ -1,0 +1,151 @@
+
+===== 0. 环境（docker / 镜像源 / 代理） =====
+Docker Compose version v5.5.1
+  镜像源=[https://docker.m.daocloud.io/]
+  dockerd 的代理环境：HTTPProxy:socks5h://127.0.0.1:10808
+HTTPSProxy:socks5h://127.0.0.1:10808
+  start-docker.sh 会自动探测 127.0.0.1:10808 代理（v2rayN）
+  ollama: ollama version is 0.34.4（宿主）+ 容器 WeKnora-ollama
+
+===== 1. 部署清单（WeKnora v0.8.2，6 个容器） =====
+NAME                IMAGE                                   STATUS                   PORTS
+WeKnora-app         wechatopenai/weknora-app:v0.8.2         Up 4 minutes (healthy)   0.0.0.0:18300->8080/tcp, [::]:18300->8080/tcp
+WeKnora-docreader   wechatopenai/weknora-docreader:v0.8.2   Up 4 minutes (healthy)   50051/tcp
+WeKnora-frontend    wechatopenai/weknora-ui:v0.8.2          Up 4 minutes             0.0.0.0:18380->80/tcp, [::]:18380->80/tcp
+WeKnora-ollama      ollama/ollama:latest                    Up 4 minutes             11434/tcp
+WeKnora-postgres    paradedb/paradedb:v0.22.6-pg17          Up 4 minutes (healthy)   5432/tcp
+WeKnora-redis       redis:7.0-alpine                        Up 4 minutes             6379/tcp
+  --- 版本（.env 里示例有 latest，我们覆盖成 v0.8.2；后写的生效）---
+817:WEKNORA_VERSION=v0.8.2
+  --- 镜像 tag ---
+ollama/ollama:latest
+paradedb/paradedb:v0.22.6-pg17
+wechatopenai/weknora-app:v0.8.2
+wechatopenai/weknora-docreader:v0.8.2
+wechatopenai/weknora-ui:v0.8.2
+
+===== 2. 模型（对话=DeepSeek 直连；向量=本机 ollama） =====
+2026/09/27 15:01:56 [builtin-models] upserted: id=builtin-llm-deepseek name=deepseek-v4-flash type=KnowledgeQA
+2026/09/27 15:01:56 [builtin-models] upserted: id=builtin-embedding-ollama name=nomic-embed-text type=Embedding
+INFO [2026-09-27 15:01:56.933] []                      | Ollama base URL: http://ollama:11434
+INFO [2026-09-27 15:01:56.933] []                      | Ollama service set to optional mode
+  --- ollama 模型 ---
+NAME                       ID              SIZE      MODIFIED       
+nomic-embed-text:latest    0a109f422b47    274 MB    18 minutes ago    
+  --- 向量维度实测（宿主 ollama 上同一个模型；容器里那个是同一份模型文件只读挂载）---
+    nomic-embed-text -> 768 维（builtin_models.yaml 里写的 dimension=768）
+    parameters          137M          
+    context length      2048          
+    embedding length    768           
+    embedding    
+
+===== 3. MCP 端点（只读边界） =====
+  端点: dip-doc-channel | tools = ['search_knowledge', 'list_documents'] | kb = ['edb993b3-9c28-4012-acb6-7085bc5965a5']
+  令牌长度（只报长度，不打印内容）: 47
+  --- 工具目录里的分组（我们只开了 retrieve 里的两个）---
+    分组: ['retrieve', 'chat', 'wiki', 'ingest']
+    - list_knowledge_bases   group=retrieve  destructive=False
+    - search_knowledge       group=retrieve  destructive=False
+    - grep_chunks            group=retrieve  destructive=False
+    - list_documents         group=retrieve  destructive=False
+    - read_document          group=retrieve  destructive=False
+    - ask                    group=chat      destructive=False
+    - wiki_search            group=wiki      destructive=False
+    - wiki_read_page         group=wiki      destructive=False
+    - wiki_index             group=wiki      destructive=False
+    - add_document           group=ingest    destructive=True
+    - update_document        group=ingest    destructive=True
+
+===== 4. 平台侧通道状态（GET /api/knowledge/doc-channel） =====
+{
+    "enabled": true,
+    "usable_for_conclusion": false,
+    "tool_group": "retrieve",
+    "channel": "documents",
+    "transport": "mcp/streamable-http",
+    "url": "http://127.0.0.1:18300/mcp/06503b5c-dc11-48f7-8e50-0745ae670e44",
+    "search_tool": "search_knowledge",
+    "kb_ids": [
+        "edb993b3-9c28-4012-acb6-7085bc5965a5"
+    ],
+    "limit": 5
+}
+
+===== 5. 只查文档通道（POST /api/knowledge/doc-search） =====
+  query = 库存增量怎么算
+  channel = documents | usable_for_conclusion = False | count = 3
+  [1] 来源=产销存月报口径说明.md#65db8f5e…  kb=edb993b3…  score=0.016
+      正文片段：# Summary 产销存月报的业务背景说明，解释产量、销量、库存增量等指标含义及使用注意事项。  本文档是产销存月报的业务背景说明，用于演示与验收，强调其只讲业务上如何看数，不定义平台口径。文档说明…
+  [2] 来源=产销存月报口径说明.md#617814ec…  kb=edb993b3…  score=0.016
+      正文片段：# 产销存月报口径说明（业务背景稿）  > 这份文档是给「文档通道」做演示与验收用的**背景说明**。它讲的是业务上怎么看这些数， > **不定义平台口径** —— 平台口径以口径库（结构化通道）为准…
+  [3] 来源=产销存月报口径说明.md#02c2d7d4…  kb=edb993b3…  score=0.016
+      正文片段：数据从明细层（`dwd`）汇总到汇总层（`dws`），最后落到应用层（`ads`）供业务看板使用。  ## 2. 几个数怎么理解  - **产量**：打码量 + 跳码量 − 重码量。重码是重复计数，要…
+  --- rendered（给人看的那段）---
+    背景（来自文档通道，仅作参考，不作为结论）：
+    1. [产销存月报口径说明.md#65db8f5e-90d7-4f02-8d7e-dda82a9a7329，相关度 0.02] # Summary 产销存月报的业务背景说明，解释产量、销量、库存增量等指标含义及使用注意事项。 本文档是产销存月报的业务背景说明，用于演示与验收，强调其只讲业务上如何看数
+    2. [产销存月报口径说明.md#617814ec-89ed-4516-8a2a-3b28c4fc9362，相关度 0.02] # 产销存月报口径说明（业务背景稿） > 这份文档是给「文档通道」做演示与验收用的**背景说明**。它讲的是业务上怎么看这些数， > **不定义平台口径** —— 平台口径
+    3. [产销存月报口径说明.md#02c2d7d4-6d99-4028-b2b1-7c8c7f30fc19，相关度 0.02] 数据从明细层（`dwd`）汇总到汇总层（`dws`），最后落到应用层（`ads`）供业务看板使用。 ## 2. 几个数怎么理解 - **产量**：打码量 + 跳码量 − 重
+
+===== 6. 验收①：双通道同时命中时，结论只来自结构化通道 =====
+  结论字段逐字段比对：result 相同 = True
+  结论文本相同 = True
+  --- 结论（结构化通道给的）---
+    产量 = 打码量 + 跳码量 - 重码量。忠实表达式：产量 = SUM(打码量) + SUM(跳码量) - SUM(重码量)。公式不在 ads.ads_产销存月报 本层，而在 cdw.dwd_卷烟产量码段明细（dwd 层）；上游层次：ods → dwd → dws → dim。
+    status = verified | 证据条数 = 3
+    evidence[0] = {"type": "lineage", "ref": "graph:ads.ads_产销存月报", "summary": "上游 9 张 / 13 条边", "source": null, "endpoint": "POST /upstream"}
+  --- 背景（文档通道给的，usable_for_conclusion = False ）---
+    [产销存月报口径说明.md#02c2d7d4…] 数据从明细层（`dwd`）汇总到汇总层（`dws`），最后落到应用层（`ads`）供业务看板使用。
+
+## 2. 几个数怎么理解
+
+- **产量**：打码量 +…
+    [产销存月报口径说明.md#65db8f5e…] # Summary
+产销存月报的业务背景说明，解释产量、销量、库存增量等指标含义及使用注意事项。
+
+本文档是产销存月报的业务背景说明，用于演示与验收，强调其只讲…
+    [产销存月报口径说明.md#617814ec…] # 产销存月报口径说明（业务背景稿）
+
+> 这份文档是给「文档通道」做演示与验收用的**背景说明**。它讲的是业务上怎么看这些数，
+> **不定义平台口径** …
+  --- 工具步骤条（末尾那条就是文档通道）---
+    search               ok=True POST /kb/search
+    search               ok=True POST /kb/search
+    upstream             ok=True POST /upstream
+    search_knowledge     ok=True http://127.0.0.1:18300/mcp/06503b5c-dc11-48f7-8e50-0745ae670e44
+  不带 with_docs 时 background = None
+
+===== 7. 文档里的数字不会变成结论（文档里明写 37%，结论里没有它） =====
+  文档材料里出现 37% = True
+  结论里出现 37%     = False
+  结论里的数字来自结构化通道的证据（34 行脚本来源 + 口径库），文档材料只在 background 字段
+
+===== 8. 验收②：文档通道的引用必须标注来源 =====
+  材料 3 条，缺来源的 0 条（必须为 0）
+    产销存月报口径说明.md#65db8f5e-90d7-4f02-8d7e-dda82a9a7329
+    产销存月报口径说明.md#617814ec-89ed-4516-8a2a-3b28c4fc9362
+    产销存月报口径说明.md#02c2d7d4-6d99-4028-b2b1-7c8c7f30fc19
+
+===== 9. 反例（离线用例）：缺来源被拒、通道未启用 503、结论被污染直接抛 =====
+........................................                                 [100%]
+  --- 用例名 ---
+tests/test_doc_channel.py: 13
+tests/test_doc_client.py: 18
+tests/test_doc_router.py: 9
+
+
+===== 10. 门禁 =====
+   ✅ PASS
+
+GATE: ALL_PASS
+
+===== 11. 边界核对（既有资产未动） =====
+ M apps/portal-api/src/portal_api/main.py
+ M apps/portal-api/src/portal_api/routers/agent.py
+ M ops/start-portal.sh
+ M packages/dip-contracts/src/dip_contracts/__init__.py
+ M packages/dip-contracts/src/dip_contracts/models.py
+ M packages/dip-core/src/dip_core/config.py
+ M pyproject.toml
+ M tests/test_layering.py
+  （上面只应出现本 Issue 新增/登记的文件）
+  （上面无输出 = 冻结资产一个字没动）
