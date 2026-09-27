@@ -74,3 +74,32 @@ PYTHONPATH=packages/dip-refine/src:packages/dip-contracts/src:packages/dip-core/
 
 - **抽检必须是人**：`templates/人工抽检记录.md` 的四项勾全，才允许提交候选。
 - 代码与测试：AI 起草（Hermes Agent），提交人逐行复核后合并。
+
+## 抽检放行后的入库（2026-09-27）
+
+提炼报告只出报告不落库（#16 的边界），**入库要等人工抽检**。放行后走：
+
+```bash
+bash ops/ingest-refine.sh --dry-run    # 先看会做什么
+bash ops/ingest-refine.sh              # 真入库：提交 → 审核 approve → ingest
+```
+
+它做的事与三条规矩：
+
+| 规矩 | 怎么落实的 |
+| --- | --- |
+| 抽检合格才入库 | 脚本记录放行依据（人 + 日期 + 原话）到证据抬头；没放行就不该跑 |
+| 不合格的候选 | 报告里 `check.ok=false` 的（本例 `cdw.dws_产量汇总.work_order_cnt`，缺依赖字段）**提交即被契约层 400 拒**——连候选池都进不去（比"先收下再拒"更严） |
+| 每一条走真审核流 | 提交 → `review approve`（必须显式 `worth_keeping=true`）→ `ingest`；不绕过接口直接写库 |
+| 幂等 | 同 subject + 同公式已在候选池就跳过；重跑第二次的结果是 `ingested=0 skipped=50 rejected=1` |
+| 数字上看得见 | 前后直接问库计数（列表接口按 limit 取，没有全量 total，别拿它当计数） |
+
+本机实跑（证据 `docs/evidence/refine-ingest-20260927-212214.txt`，重跑见 `…-212540.txt`）：
+
+```
+入库前：候选池 1139 条 / 口径库 745 条
+本轮小结：ingested=50  rejected=0  skipped=0  failed=1（那 1 条已改成"提交即被拒"的正确判定）
+入库后：候选池 1189 条 / 口径库 795 条     变化 +50 / +50
+抽查 ads.ads_产销存月报.sale_output_ratio → v1 active，公式/来源脚本/来源行齐全
+没有来源脚本的口径条数：0（库层门禁仍然有效）
+```

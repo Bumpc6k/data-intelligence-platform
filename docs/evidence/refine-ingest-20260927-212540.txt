@@ -1,0 +1,69 @@
+==================================================================
+提炼候选入库（按抽检结论）    2026-09-27 21:25:40
+  报告：/mnt/d/Projects/data-intelligence-platform/docs/evidence/refine/refine-report.json
+  平台：http://127.0.0.1:18100
+  放行依据：人工抽检通过（仓库所有者 2026-09-27 原话：我已经抽检完成，md可以入库。）
+  模式：真入库
+==================================================================
+
+入库前：候选池 1189 条 / 口径库 795 条
+
+=== 逐条处理（提交 → 审核 → 入库；check.ok=false 的走拒绝）===
+[01/51] ads.ads_产销存月报.sale_output_ratio → 跳过（已在候选池 #1143，状态 ingested）
+[02/51] ads.ads_产销存月报.stock_increase → 跳过（已在候选池 #1144，状态 ingested）
+[03/51] ads.ads_烟叶供应商排名.amount_rank → 跳过（已在候选池 #1145，状态 ingested）
+[04/51] ads.ads_烟叶供应商排名.weight_rank → 跳过（已在候选池 #1146，状态 ingested）
+[05/51] ads.ads_税利分析.tax_profit_per_sale_box → 跳过（已在候选池 #1147，状态 ingested）
+[06/51] ads.ads_税利分析.sale_qty → 跳过（已在候选池 #1148，状态 ingested）
+[07/51] ads.ads_经营指标驾驶舱.output_qty → 跳过（已在候选池 #1149，状态 ingested）
+[08/51] ads.ads_经营指标驾驶舱.sale_qty → 跳过（已在候选池 #1150，状态 ingested）
+[09/51] ads.ads_经营指标驾驶舱.sale_amt → 跳过（已在候选池 #1151，状态 ingested）
+[10/51] ads.ads_经营指标驾驶舱.tax_profit → 跳过（已在候选池 #1152，状态 ingested）
+[11/51] ads.ads_经营指标驾驶舱.avg_sale_output_ratio → 跳过（已在候选池 #1153，状态 ingested）
+[12/51] ads.ads_经营指标驾驶舱.max_supplier_amt → 跳过（已在候选池 #1154，状态 ingested）
+[13/51] ads.ads_经营指标驾驶舱.max_device_run_rate → 跳过（已在候选池 #1155，状态 ingested）
+[14/51] ads.ads_设备运行看板.device_cnt → 跳过（已在候选池 #1156，状态 ingested）
+[15/51] ads.ads_设备运行看板.run_minutes → 跳过（已在候选池 #1157，状态 ingested）
+[16/51] ads.ads_设备运行看板.stop_minutes → 跳过（已在候选池 #1158，状态 ingested）
+[17/51] ads.ads_设备运行看板.output_qty → 跳过（已在候选池 #1159，状态 ingested）
+[18/51] ads.ads_设备运行看板.avg_run_rate → 跳过（已在候选池 #1160，状态 ingested）
+[19/51] ads.ads_设备运行看板.low_run_rate_device_cnt → 跳过（已在候选池 #1161，状态 ingested）
+[20/51] cdw.dwd_卷烟产量明细.output_qty_cig → 跳过（已在候选池 #1162，状态 ingested）
+[21/51] cdw.dwd_卷烟产量明细.defect_rate → 跳过（已在候选池 #1163，状态 ingested）
+[22/51] cdw.dwd_卷烟销量明细.unit_price → 跳过（已在候选池 #1164，状态 ingested）
+[23/51] cdw.dwd_成品库存明细.stock_unit_cost → 跳过（已在候选池 #1165，状态 ingested）
+[24/51] cdw.dwd_烟叶采购明细.total_amt → 跳过（已在候选池 #1166，状态 ingested）
+[25/51] cdw.dwd_税利明细.total_tax_profit → 跳过（已在候选池 #1167，状态 ingested）
+[26/51] cdw.dwd_设备运行明细.total_minutes → 跳过（已在候选池 #1168，状态 ingested）
+[27/51] cdw.dwd_设备运行明细.hourly_output → 跳过（已在候选池 #1169，状态 ingested）
+[28/51] cdw.dws_产量汇总.total_output_qty → 跳过（已在候选池 #1170，状态 ingested）
+[29/51] cdw.dws_产量汇总.total_defect_qty → 跳过（已在候选池 #1171，状态 ingested）
+[30/51] cdw.dws_产量汇总.work_order_cnt → 提交即被拒（HTTP 400，missing_depends_on）——不合格的候选连候选池都进不去
+[31/51] cdw.dws_库存汇总.total_stock_qty → 跳过（已在候选池 #1172，状态 ingested）
+[32/51] cdw.dws_库存汇总.total_stock_amt → 跳过（已在候选池 #1173，状态 ingested）
+[33/51] cdw.dws_库存汇总.batch_cnt → 跳过（已在候选池 #1174，状态 ingested）
+[34/51] cdw.dws_产销存汇总.sale_qty → 跳过（已在候选池 #1175，状态 ingested）
+[35/51] cdw.dws_产销存汇总.sale_amt → 跳过（已在候选池 #1176，状态 ingested）
+[36/51] cdw.dws_产销存汇总.stock_qty → 跳过（已在候选池 #1177，状态 ingested）
+[37/51] cdw.dws_烟叶采购供应商汇总.purchase_cnt → 跳过（已在候选池 #1178，状态 ingested）
+[38/51] cdw.dws_烟叶采购供应商汇总.total_weight → 跳过（已在候选池 #1179，状态 ingested）
+[39/51] cdw.dws_烟叶采购供应商汇总.total_amt → 跳过（已在候选池 #1180，状态 ingested）
+[40/51] cdw.dws_烟叶采购供应商汇总.avg_unit_price → 跳过（已在候选池 #1181，状态 ingested）
+[41/51] cdw.dws_烟叶采购供应商汇总.best_leaf_grade → 跳过（已在候选池 #1182，状态 ingested）
+[42/51] cdw.dws_税利汇总.tax_profit_per_box → 跳过（已在候选池 #1183，状态 ingested）
+[43/51] cdw.dws_税利汇总.total_tax_profit → 跳过（已在候选池 #1184，状态 ingested）
+[44/51] cdw.dws_税利汇总.total_tax_amt → 跳过（已在候选池 #1185，状态 ingested）
+[45/51] cdw.dws_税利汇总.total_profit_amt → 跳过（已在候选池 #1186，状态 ingested）
+[46/51] cdw.dws_税利汇总.total_output_qty → 跳过（已在候选池 #1187，状态 ingested）
+[47/51] cdw.dws_设备效率汇总.total_run_minutes → 跳过（已在候选池 #1188，状态 ingested）
+[48/51] cdw.dws_设备效率汇总.total_stop_minutes → 跳过（已在候选池 #1189，状态 ingested）
+[49/51] cdw.dws_设备效率汇总.total_output_qty → 跳过（已在候选池 #1190，状态 ingested）
+[50/51] cdw.dws_设备效率汇总.avg_hourly_output → 跳过（已在候选池 #1191，状态 ingested）
+[51/51] cdw.dws_设备效率汇总.run_rate → 跳过（已在候选池 #1192，状态 ingested）
+
+本轮小结：ingested=0  rejected=1  skipped=50  failed=0
+
+入库后：候选池 1189 条 / 口径库 795 条
+变化  ：候选池 0 / 口径库 0
+
+证据：/mnt/d/Projects/data-intelligence-platform/docs/evidence/refine-ingest-20260927-212540.txt
