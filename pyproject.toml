@@ -16,6 +16,7 @@ dependencies = [
   "httpx>=0.27",
   "pydantic>=2.7",
   "pyyaml>=6.0",    # skill 契约声明的 YAML 解析（M1-02）；此前仅由 uvicorn[standard] 间接带入，属未声明依赖
+  "mcp>=2.2,<3",    # MCP 服务端 SDK（M1-03）。锁 <3：2.x 已把 FastMCP 改名为 MCPServer，v3 变更需重新评估
 ]
 
 [project.optional-dependencies]
@@ -33,6 +34,7 @@ pythonpath = [
   "packages/dip-core/src",
   "packages/dip-agent/src",
   "packages/dip-skills/src",
+  "packages/dip-lineage-skill/src",
   "integrations/lineage-client/src",
 ]
 testpaths = ["tests", "integrations/lineage-client/tests", "packages"]

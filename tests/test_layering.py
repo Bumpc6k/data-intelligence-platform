@@ -21,6 +21,7 @@ PKG_DIRS = {
     "dip_core": ROOT / "packages/dip-core/src/dip_core",
     "dip_agent": ROOT / "packages/dip-agent/src/dip_agent",
     "dip_skills": ROOT / "packages/dip-skills/src/dip_skills",
+    "dip_lineage_skill": ROOT / "packages/dip-lineage-skill/src/dip_lineage_skill",
     "lineage_client": ROOT / "integrations/lineage-client/src/lineage_client",
     "portal_api": ROOT / "apps/portal-api/src/portal_api",
 }
@@ -29,6 +30,11 @@ ALLOWED: dict[str, set[str]] = {
     "dip_contracts": set(),
     "dip_core": set(),
     "dip_skills": set(),                          # 声明层：不依赖任何其它单元（标准库 + pydantic + YAML）
+    "dip_lineage_skill": {                        # skill 实现：依赖契约与"协议"，不依赖上层
+        "dip_contracts",                          # KernelToolkit 协议 + ToolResult
+        "dip_skills",                             # 契约声明与回执
+        "lineage_client",                         # 仅在进程入口 wiring 真实适配器时用到
+    },
     "lineage_client": {"dip_contracts"},          # 适配器实现契约层的 KernelToolkit 协议
     "dip_agent": {"dip_contracts", "dip_core"},   # 只依赖协议，不依赖 httpx 适配器
     "portal_api": {"dip_contracts", "dip_core", "dip_agent", "lineage_client"},
