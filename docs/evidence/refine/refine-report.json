@@ -1,0 +1,3289 @@
+{
+  "project": "/root/projects/sql-lineage-mvp/examples/warehouse",
+  "model": "deepseek-v4-flash",
+  "generated_at": "2026-09-27T05:20:29+00:00",
+  "wrote_to_candidate_pool": false,
+  "incomplete": false,
+  "counts": {
+    "scripts": 21,
+    "scripts_parsed_ok": 21,
+    "statements": 24,
+    "llm_calls": 24,
+    "candidates": 51,
+    "candidates_ok": 50,
+    "candidates_needing_human": 1
+  },
+  "scripts": [
+    {
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "cdw.dws_产销存汇总",
+        "dim.dim_plant",
+        "dim.dim_brand",
+        "ads.ads_产销存月报"
+      ],
+      "fields": [
+        "brand_code",
+        "brand_name",
+        "output_qty",
+        "plant_code",
+        "plant_name",
+        "price_band",
+        "sale_amt",
+        "sale_output_ratio",
+        "sale_qty",
+        "stock_increase",
+        "stock_qty"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dws_产销存汇总",
+            "dim.dim_plant",
+            "dim.dim_brand"
+          ],
+          "output_tables": [
+            "ads.ads_产销存月报"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "s.plant_code AS plant_code",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "plant_name",
+              "expression": "pl.plant_name AS plant_name",
+              "source_table": "dim.dim_plant"
+            },
+            {
+              "column": "brand_code",
+              "expression": "s.brand_code AS brand_code",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "brand_name",
+              "expression": "bd.brand_name AS brand_name",
+              "source_table": "dim.dim_brand"
+            },
+            {
+              "column": "price_band",
+              "expression": "bd.price_band AS price_band",
+              "source_table": "dim.dim_brand"
+            },
+            {
+              "column": "output_qty",
+              "expression": "s.output_qty AS output_qty",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "sale_qty",
+              "expression": "s.sale_qty AS sale_qty",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "stock_qty",
+              "expression": "s.stock_qty AS stock_qty",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "sale_amt",
+              "expression": "s.sale_amt AS sale_amt",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "sale_output_ratio",
+              "expression": "ROUND(s.sale_qty / NULLIF(s.output_qty, 0), 4) AS sale_output_ratio",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "sale_output_ratio",
+              "expression": "ROUND(s.sale_qty / NULLIF(s.output_qty, 0), 4) AS sale_output_ratio",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "stock_increase",
+              "expression": "s.output_qty - s.sale_qty AS stock_increase",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "stock_increase",
+              "expression": "s.output_qty - s.sale_qty AS stock_increase",
+              "source_table": "cdw.dws_产销存汇总"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ads/ads_烟叶供应商排名.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "cdw.dws_烟叶采购供应商汇总",
+        "ads.ads_烟叶供应商排名"
+      ],
+      "fields": [
+        "amount_rank",
+        "avg_unit_price",
+        "purchase_cnt",
+        "supplier_code",
+        "supplier_level",
+        "supplier_name",
+        "total_amt",
+        "total_weight",
+        "weight_rank"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dws_烟叶采购供应商汇总"
+          ],
+          "output_tables": [
+            "ads.ads_烟叶供应商排名"
+          ],
+          "columns": [
+            {
+              "column": "supplier_code",
+              "expression": "c.supplier_code AS supplier_code",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            },
+            {
+              "column": "supplier_name",
+              "expression": "c.supplier_name AS supplier_name",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            },
+            {
+              "column": "supplier_level",
+              "expression": "c.supplier_level AS supplier_level",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            },
+            {
+              "column": "purchase_cnt",
+              "expression": "c.purchase_cnt AS purchase_cnt",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            },
+            {
+              "column": "total_weight",
+              "expression": "c.total_weight AS total_weight",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            },
+            {
+              "column": "total_amt",
+              "expression": "c.total_amt AS total_amt",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            },
+            {
+              "column": "avg_unit_price",
+              "expression": "c.avg_unit_price AS avg_unit_price",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            },
+            {
+              "column": "amount_rank",
+              "expression": "ROW_NUMBER() OVER (ORDER BY c.total_amt DESC) AS amount_rank",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            },
+            {
+              "column": "weight_rank",
+              "expression": "DENSE_RANK() OVER (ORDER BY c.total_weight DESC) AS weight_rank",
+              "source_table": "cdw.dws_烟叶采购供应商汇总"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ads/ads_税利分析.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "cdw.dws_税利汇总",
+        "cdw.dws_产销存汇总",
+        "dim.dim_brand",
+        "ads.ads_税利分析"
+      ],
+      "fields": [
+        "brand_code",
+        "brand_name",
+        "plant_code",
+        "profit_amt",
+        "sale_qty",
+        "stat_month",
+        "tax_amt",
+        "tax_profit",
+        "tax_profit_per_box",
+        "tax_profit_per_sale_box"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dws_税利汇总",
+            "cdw.dws_产销存汇总",
+            "dim.dim_brand"
+          ],
+          "output_tables": [
+            "ads.ads_税利分析"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "t.plant_code AS plant_code",
+              "source_table": "cdw.dws_税利汇总"
+            },
+            {
+              "column": "brand_code",
+              "expression": "t.brand_code AS brand_code",
+              "source_table": "cdw.dws_税利汇总"
+            },
+            {
+              "column": "brand_name",
+              "expression": "bd.brand_name AS brand_name",
+              "source_table": "dim.dim_brand"
+            },
+            {
+              "column": "stat_month",
+              "expression": "t.stat_month AS stat_month",
+              "source_table": "cdw.dws_税利汇总"
+            },
+            {
+              "column": "tax_amt",
+              "expression": "t.total_tax_amt AS tax_amt",
+              "source_table": "cdw.dws_税利汇总"
+            },
+            {
+              "column": "profit_amt",
+              "expression": "t.total_profit_amt AS profit_amt",
+              "source_table": "cdw.dws_税利汇总"
+            },
+            {
+              "column": "tax_profit",
+              "expression": "t.total_tax_profit AS tax_profit",
+              "source_table": "cdw.dws_税利汇总"
+            },
+            {
+              "column": "tax_profit_per_box",
+              "expression": "t.tax_profit_per_box AS tax_profit_per_box",
+              "source_table": "cdw.dws_税利汇总"
+            },
+            {
+              "column": "sale_qty",
+              "expression": "COALESCE(p.sale_qty, 0) AS sale_qty",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "tax_profit_per_sale_box",
+              "expression": "CASE WHEN COALESCE(p.sale_qty, 0) > 0 THEN ROUND(t.total_tax_profit / p.sale_qty, 2) ELSE 0 END AS tax_profit_per_sale_box",
+              "source_table": "cdw.dws_产销存汇总"
+            },
+            {
+              "column": "tax_profit_per_sale_box",
+              "expression": "CASE WHEN COALESCE(p.sale_qty, 0) > 0 THEN ROUND(t.total_tax_profit / p.sale_qty, 2) ELSE 0 END AS tax_profit_per_sale_box",
+              "source_table": "cdw.dws_税利汇总"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ads/ads_经营指标驾驶舱.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "ads.ads_产销存月报",
+        "ads.ads_税利分析",
+        "ads.ads_经营指标明细",
+        "ads.ads_烟叶供应商排名",
+        "ads.ads_设备运行看板",
+        "ads.ads_经营指标驾驶舱"
+      ],
+      "fields": [
+        "brand_code",
+        "brand_name",
+        "output_qty",
+        "plant_code",
+        "plant_name",
+        "sale_amt",
+        "sale_output_ratio",
+        "sale_qty",
+        "tax_profit",
+        "tax_profit_per_box",
+        "avg_sale_output_ratio",
+        "max_device_run_rate",
+        "max_supplier_amt"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "CTAS",
+          "input_tables": [
+            "ads.ads_产销存月报",
+            "ads.ads_税利分析"
+          ],
+          "output_tables": [
+            "ads.ads_经营指标明细"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "m.plant_code AS plant_code",
+              "source_table": "ads.ads_产销存月报"
+            },
+            {
+              "column": "plant_name",
+              "expression": "m.plant_name AS plant_name",
+              "source_table": "ads.ads_产销存月报"
+            },
+            {
+              "column": "brand_code",
+              "expression": "m.brand_code AS brand_code",
+              "source_table": "ads.ads_产销存月报"
+            },
+            {
+              "column": "brand_name",
+              "expression": "m.brand_name AS brand_name",
+              "source_table": "ads.ads_产销存月报"
+            },
+            {
+              "column": "output_qty",
+              "expression": "m.output_qty AS output_qty",
+              "source_table": "ads.ads_产销存月报"
+            },
+            {
+              "column": "sale_qty",
+              "expression": "m.sale_qty AS sale_qty",
+              "source_table": "ads.ads_产销存月报"
+            },
+            {
+              "column": "sale_amt",
+              "expression": "m.sale_amt AS sale_amt",
+              "source_table": "ads.ads_产销存月报"
+            },
+            {
+              "column": "sale_output_ratio",
+              "expression": "m.sale_output_ratio AS sale_output_ratio",
+              "source_table": "ads.ads_产销存月报"
+            },
+            {
+              "column": "tax_profit",
+              "expression": "t.tax_profit AS tax_profit",
+              "source_table": "ads.ads_税利分析"
+            },
+            {
+              "column": "tax_profit_per_box",
+              "expression": "t.tax_profit_per_box AS tax_profit_per_box",
+              "source_table": "ads.ads_税利分析"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "ads.ads_经营指标明细",
+            "ads.ads_烟叶供应商排名",
+            "ads.ads_设备运行看板"
+          ],
+          "output_tables": [
+            "ads.ads_经营指标驾驶舱"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "i.plant_code AS plant_code",
+              "source_table": "ads.ads_经营指标明细"
+            },
+            {
+              "column": "plant_name",
+              "expression": "i.plant_name AS plant_name",
+              "source_table": "ads.ads_经营指标明细"
+            },
+            {
+              "column": "output_qty",
+              "expression": "SUM(i.output_qty) AS output_qty",
+              "source_table": "ads.ads_经营指标明细"
+            },
+            {
+              "column": "sale_qty",
+              "expression": "SUM(i.sale_qty) AS sale_qty",
+              "source_table": "ads.ads_经营指标明细"
+            },
+            {
+              "column": "sale_amt",
+              "expression": "SUM(i.sale_amt) AS sale_amt",
+              "source_table": "ads.ads_经营指标明细"
+            },
+            {
+              "column": "tax_profit",
+              "expression": "SUM(i.tax_profit) AS tax_profit",
+              "source_table": "ads.ads_经营指标明细"
+            },
+            {
+              "column": "avg_sale_output_ratio",
+              "expression": "ROUND(AVG(i.sale_output_ratio), 4) AS avg_sale_output_ratio",
+              "source_table": "ads.ads_经营指标明细"
+            },
+            {
+              "column": "max_supplier_amt",
+              "expression": "MAX(s.total_amt) AS max_supplier_amt",
+              "source_table": "ads.ads_烟叶供应商排名"
+            },
+            {
+              "column": "max_device_run_rate",
+              "expression": "MAX(e.avg_run_rate) AS max_device_run_rate",
+              "source_table": "ads.ads_设备运行看板"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ads/ads_设备运行看板.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "cdw.dws_设备效率汇总",
+        "ads.ads_设备运行看板"
+      ],
+      "fields": [
+        "avg_run_rate",
+        "device_cnt",
+        "device_type",
+        "low_run_rate_device_cnt",
+        "output_qty",
+        "plant_code",
+        "run_minutes",
+        "stop_minutes"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dws_设备效率汇总"
+          ],
+          "output_tables": [
+            "ads.ads_设备运行看板"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "e.plant_code AS plant_code",
+              "source_table": "cdw.dws_设备效率汇总"
+            },
+            {
+              "column": "device_type",
+              "expression": "e.device_type AS device_type",
+              "source_table": "cdw.dws_设备效率汇总"
+            },
+            {
+              "column": "device_cnt",
+              "expression": "COUNT(1) AS device_cnt",
+              "source_table": ""
+            },
+            {
+              "column": "run_minutes",
+              "expression": "SUM(e.total_run_minutes) AS run_minutes",
+              "source_table": "cdw.dws_设备效率汇总"
+            },
+            {
+              "column": "stop_minutes",
+              "expression": "SUM(e.total_stop_minutes) AS stop_minutes",
+              "source_table": "cdw.dws_设备效率汇总"
+            },
+            {
+              "column": "output_qty",
+              "expression": "SUM(e.total_output_qty) AS output_qty",
+              "source_table": "cdw.dws_设备效率汇总"
+            },
+            {
+              "column": "avg_run_rate",
+              "expression": "ROUND(AVG(e.run_rate), 4) AS avg_run_rate",
+              "source_table": "cdw.dws_设备效率汇总"
+            },
+            {
+              "column": "low_run_rate_device_cnt",
+              "expression": "SUM(CASE WHEN e.run_rate < 0.6 THEN 1 ELSE 0 END) AS low_run_rate_device_cnt",
+              "source_table": "cdw.dws_设备效率汇总"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dwd_卷烟产量明细.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "ods.ods_卷烟产量流水",
+        "dim.dim_plant",
+        "dim.dim_brand",
+        "cdw.dwd_卷烟产量明细"
+      ],
+      "fields": [
+        "brand_code",
+        "brand_name",
+        "defect_qty",
+        "defect_rate",
+        "output_qty",
+        "output_qty_cig",
+        "plant_code",
+        "plant_name",
+        "price_band",
+        "shift_code",
+        "work_date",
+        "work_order_no"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "CTAS",
+          "input_tables": [
+            "ods.ods_卷烟产量流水",
+            "dim.dim_plant",
+            "dim.dim_brand"
+          ],
+          "output_tables": [
+            "cdw.dwd_卷烟产量明细"
+          ],
+          "columns": [
+            {
+              "column": "work_order_no",
+              "expression": "p.work_order_no AS work_order_no",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "work_date",
+              "expression": "p.work_date AS work_date",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "plant_code",
+              "expression": "p.plant_code AS plant_code",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "plant_name",
+              "expression": "pl.plant_name AS plant_name",
+              "source_table": "dim.dim_plant"
+            },
+            {
+              "column": "brand_code",
+              "expression": "p.brand_code AS brand_code",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "brand_name",
+              "expression": "bd.brand_name AS brand_name",
+              "source_table": "dim.dim_brand"
+            },
+            {
+              "column": "price_band",
+              "expression": "bd.price_band AS price_band",
+              "source_table": "dim.dim_brand"
+            },
+            {
+              "column": "output_qty",
+              "expression": "p.output_qty AS output_qty",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "output_qty_cig",
+              "expression": "p.output_qty * 250 AS output_qty_cig",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "defect_qty",
+              "expression": "p.defect_qty AS defect_qty",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "defect_rate",
+              "expression": "CASE WHEN p.output_qty > 0 THEN ROUND(p.defect_qty / p.output_qty, 6) ELSE 0 END AS defect_rate",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "defect_rate",
+              "expression": "CASE WHEN p.output_qty > 0 THEN ROUND(p.defect_qty / p.output_qty, 6) ELSE 0 END AS defect_rate",
+              "source_table": "ods.ods_卷烟产量流水"
+            },
+            {
+              "column": "shift_code",
+              "expression": "p.shift_code AS shift_code",
+              "source_table": "ods.ods_卷烟产量流水"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dwd_卷烟销量明细.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "ods.ods_卷烟销量流水",
+        "dim.dim_brand",
+        "cdw.dwd_卷烟销量明细"
+      ],
+      "fields": [
+        "brand_code",
+        "brand_name",
+        "channel_code",
+        "customer_code",
+        "outbound_no",
+        "sale_amt",
+        "sale_date",
+        "sale_qty",
+        "unit_price"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "ods.ods_卷烟销量流水",
+            "dim.dim_brand"
+          ],
+          "output_tables": [
+            "cdw.dwd_卷烟销量明细"
+          ],
+          "columns": [
+            {
+              "column": "outbound_no",
+              "expression": "s.outbound_no AS outbound_no",
+              "source_table": "ods.ods_卷烟销量流水"
+            },
+            {
+              "column": "sale_date",
+              "expression": "s.sale_date AS sale_date",
+              "source_table": "ods.ods_卷烟销量流水"
+            },
+            {
+              "column": "customer_code",
+              "expression": "s.customer_code AS customer_code",
+              "source_table": "ods.ods_卷烟销量流水"
+            },
+            {
+              "column": "brand_code",
+              "expression": "s.brand_code AS brand_code",
+              "source_table": "ods.ods_卷烟销量流水"
+            },
+            {
+              "column": "brand_name",
+              "expression": "bd.brand_name AS brand_name",
+              "source_table": "dim.dim_brand"
+            },
+            {
+              "column": "channel_code",
+              "expression": "s.channel_code AS channel_code",
+              "source_table": "ods.ods_卷烟销量流水"
+            },
+            {
+              "column": "sale_qty",
+              "expression": "s.sale_qty AS sale_qty",
+              "source_table": "ods.ods_卷烟销量流水"
+            },
+            {
+              "column": "sale_amt",
+              "expression": "s.sale_amt AS sale_amt",
+              "source_table": "ods.ods_卷烟销量流水"
+            },
+            {
+              "column": "unit_price",
+              "expression": "CASE WHEN s.sale_qty > 0 THEN ROUND(s.sale_amt / s.sale_qty, 2) ELSE 0 END AS unit_price",
+              "source_table": "ods.ods_卷烟销量流水"
+            },
+            {
+              "column": "unit_price",
+              "expression": "CASE WHEN s.sale_qty > 0 THEN ROUND(s.sale_amt / s.sale_qty, 2) ELSE 0 END AS unit_price",
+              "source_table": "ods.ods_卷烟销量流水"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dwd_成品库存明细.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "ods.ods_成品库存快照",
+        "dim.dim_plant",
+        "cdw.dwd_成品库存明细"
+      ],
+      "fields": [
+        "batch_no",
+        "brand_code",
+        "plant_code",
+        "plant_name",
+        "stock_amt",
+        "stock_date",
+        "stock_qty",
+        "stock_unit_cost",
+        "warehouse_code"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "ods.ods_成品库存快照",
+            "dim.dim_plant"
+          ],
+          "output_tables": [
+            "cdw.dwd_成品库存明细"
+          ],
+          "columns": [
+            {
+              "column": "warehouse_code",
+              "expression": "k.warehouse_code AS warehouse_code",
+              "source_table": "ods.ods_成品库存快照"
+            },
+            {
+              "column": "stock_date",
+              "expression": "k.stock_date AS stock_date",
+              "source_table": "ods.ods_成品库存快照"
+            },
+            {
+              "column": "plant_code",
+              "expression": "k.plant_code AS plant_code",
+              "source_table": "ods.ods_成品库存快照"
+            },
+            {
+              "column": "plant_name",
+              "expression": "pl.plant_name AS plant_name",
+              "source_table": "dim.dim_plant"
+            },
+            {
+              "column": "brand_code",
+              "expression": "k.brand_code AS brand_code",
+              "source_table": "ods.ods_成品库存快照"
+            },
+            {
+              "column": "batch_no",
+              "expression": "k.batch_no AS batch_no",
+              "source_table": "ods.ods_成品库存快照"
+            },
+            {
+              "column": "stock_qty",
+              "expression": "k.stock_qty AS stock_qty",
+              "source_table": "ods.ods_成品库存快照"
+            },
+            {
+              "column": "stock_amt",
+              "expression": "k.stock_amt AS stock_amt",
+              "source_table": "ods.ods_成品库存快照"
+            },
+            {
+              "column": "stock_unit_cost",
+              "expression": "ROUND(k.stock_amt / NULLIF(k.stock_qty, 0), 2) AS stock_unit_cost",
+              "source_table": "ods.ods_成品库存快照"
+            },
+            {
+              "column": "stock_unit_cost",
+              "expression": "ROUND(k.stock_amt / NULLIF(k.stock_qty, 0), 2) AS stock_unit_cost",
+              "source_table": "ods.ods_成品库存快照"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dwd_烟叶采购明细.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "ods.ods_烟叶采购到货",
+        "dim.dim_supplier",
+        "cdw.dwd_烟叶采购明细"
+      ],
+      "fields": [
+        "leaf_grade",
+        "leaf_weight",
+        "origin_area",
+        "purchase_no",
+        "receive_date",
+        "supplier_code",
+        "supplier_level",
+        "supplier_name",
+        "total_amt",
+        "unit_price"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "ods.ods_烟叶采购到货",
+            "dim.dim_supplier"
+          ],
+          "output_tables": [
+            "cdw.dwd_烟叶采购明细"
+          ],
+          "columns": [
+            {
+              "column": "purchase_no",
+              "expression": "c.purchase_no AS purchase_no",
+              "source_table": "ods.ods_烟叶采购到货"
+            },
+            {
+              "column": "receive_date",
+              "expression": "c.receive_date AS receive_date",
+              "source_table": "ods.ods_烟叶采购到货"
+            },
+            {
+              "column": "supplier_code",
+              "expression": "c.supplier_code AS supplier_code",
+              "source_table": "ods.ods_烟叶采购到货"
+            },
+            {
+              "column": "supplier_name",
+              "expression": "sp.supplier_name AS supplier_name",
+              "source_table": "dim.dim_supplier"
+            },
+            {
+              "column": "supplier_level",
+              "expression": "sp.supplier_level AS supplier_level",
+              "source_table": "dim.dim_supplier"
+            },
+            {
+              "column": "leaf_grade",
+              "expression": "c.leaf_grade AS leaf_grade",
+              "source_table": "ods.ods_烟叶采购到货"
+            },
+            {
+              "column": "origin_area",
+              "expression": "c.origin_area AS origin_area",
+              "source_table": "ods.ods_烟叶采购到货"
+            },
+            {
+              "column": "leaf_weight",
+              "expression": "c.leaf_weight AS leaf_weight",
+              "source_table": "ods.ods_烟叶采购到货"
+            },
+            {
+              "column": "unit_price",
+              "expression": "c.unit_price AS unit_price",
+              "source_table": "ods.ods_烟叶采购到货"
+            },
+            {
+              "column": "total_amt",
+              "expression": "ROUND(c.leaf_weight * c.unit_price, 2) AS total_amt",
+              "source_table": "ods.ods_烟叶采购到货"
+            },
+            {
+              "column": "total_amt",
+              "expression": "ROUND(c.leaf_weight * c.unit_price, 2) AS total_amt",
+              "source_table": "ods.ods_烟叶采购到货"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dwd_税利明细.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "ods.ods_税利上缴流水",
+        "dim.dim_brand",
+        "cdw.dwd_税利明细"
+      ],
+      "fields": [
+        "brand_code",
+        "brand_name",
+        "plant_code",
+        "profit_amt",
+        "stat_month",
+        "tax_amt",
+        "tax_type",
+        "total_tax_profit",
+        "voucher_no"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "ods.ods_税利上缴流水",
+            "dim.dim_brand"
+          ],
+          "output_tables": [
+            "cdw.dwd_税利明细"
+          ],
+          "columns": [
+            {
+              "column": "voucher_no",
+              "expression": "t.voucher_no AS voucher_no",
+              "source_table": "ods.ods_税利上缴流水"
+            },
+            {
+              "column": "stat_month",
+              "expression": "t.stat_month AS stat_month",
+              "source_table": "ods.ods_税利上缴流水"
+            },
+            {
+              "column": "plant_code",
+              "expression": "t.plant_code AS plant_code",
+              "source_table": "ods.ods_税利上缴流水"
+            },
+            {
+              "column": "brand_code",
+              "expression": "t.brand_code AS brand_code",
+              "source_table": "ods.ods_税利上缴流水"
+            },
+            {
+              "column": "brand_name",
+              "expression": "bd.brand_name AS brand_name",
+              "source_table": "dim.dim_brand"
+            },
+            {
+              "column": "tax_type",
+              "expression": "t.tax_type AS tax_type",
+              "source_table": "ods.ods_税利上缴流水"
+            },
+            {
+              "column": "tax_amt",
+              "expression": "t.tax_amt AS tax_amt",
+              "source_table": "ods.ods_税利上缴流水"
+            },
+            {
+              "column": "profit_amt",
+              "expression": "t.profit_amt AS profit_amt",
+              "source_table": "ods.ods_税利上缴流水"
+            },
+            {
+              "column": "total_tax_profit",
+              "expression": "t.tax_amt + t.profit_amt AS total_tax_profit",
+              "source_table": "ods.ods_税利上缴流水"
+            },
+            {
+              "column": "total_tax_profit",
+              "expression": "t.tax_amt + t.profit_amt AS total_tax_profit",
+              "source_table": "ods.ods_税利上缴流水"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dwd_设备运行明细.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "ods.ods_设备运行工况",
+        "dim.dim_equipment",
+        "cdw.dwd_设备运行明细"
+      ],
+      "fields": [
+        "capacity_box",
+        "device_code",
+        "device_name",
+        "device_type",
+        "hourly_output",
+        "output_qty",
+        "plant_code",
+        "run_date",
+        "run_minutes",
+        "stop_minutes",
+        "total_minutes"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "ods.ods_设备运行工况",
+            "dim.dim_equipment"
+          ],
+          "output_tables": [
+            "cdw.dwd_设备运行明细"
+          ],
+          "columns": [
+            {
+              "column": "device_code",
+              "expression": "eq.device_code AS device_code",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "device_type",
+              "expression": "eq.device_type AS device_type",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "device_name",
+              "expression": "de.device_name AS device_name",
+              "source_table": "dim.dim_equipment"
+            },
+            {
+              "column": "capacity_box",
+              "expression": "de.capacity_box AS capacity_box",
+              "source_table": "dim.dim_equipment"
+            },
+            {
+              "column": "plant_code",
+              "expression": "eq.plant_code AS plant_code",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "run_date",
+              "expression": "eq.run_date AS run_date",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "run_minutes",
+              "expression": "eq.run_minutes AS run_minutes",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "stop_minutes",
+              "expression": "eq.stop_minutes AS stop_minutes",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "total_minutes",
+              "expression": "eq.run_minutes + eq.stop_minutes AS total_minutes",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "total_minutes",
+              "expression": "eq.run_minutes + eq.stop_minutes AS total_minutes",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "output_qty",
+              "expression": "eq.output_qty AS output_qty",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "hourly_output",
+              "expression": "CASE WHEN eq.run_minutes > 0 THEN ROUND(eq.output_qty * 60 / eq.run_minutes, 2) ELSE 0 END AS hourly_output",
+              "source_table": "ods.ods_设备运行工况"
+            },
+            {
+              "column": "hourly_output",
+              "expression": "CASE WHEN eq.run_minutes > 0 THEN ROUND(eq.output_qty * 60 / eq.run_minutes, 2) ELSE 0 END AS hourly_output",
+              "source_table": "ods.ods_设备运行工况"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "cdw.dwd_卷烟产量明细",
+        "cdw.dws_产量汇总",
+        "cdw.dwd_成品库存明细",
+        "cdw.dws_库存汇总",
+        "cdw.dwd_卷烟销量明细",
+        "cdw.dws_产销存汇总"
+      ],
+      "fields": [
+        "brand_code",
+        "plant_code",
+        "total_defect_qty",
+        "total_output_qty",
+        "work_order_cnt",
+        "batch_cnt",
+        "total_stock_amt",
+        "total_stock_qty",
+        "output_qty",
+        "sale_amt",
+        "sale_qty",
+        "stock_qty"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dwd_卷烟产量明细"
+          ],
+          "output_tables": [
+            "cdw.dws_产量汇总"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "d.plant_code AS plant_code",
+              "source_table": "cdw.dwd_卷烟产量明细"
+            },
+            {
+              "column": "brand_code",
+              "expression": "d.brand_code AS brand_code",
+              "source_table": "cdw.dwd_卷烟产量明细"
+            },
+            {
+              "column": "total_output_qty",
+              "expression": "SUM(d.output_qty) AS total_output_qty",
+              "source_table": "cdw.dwd_卷烟产量明细"
+            },
+            {
+              "column": "total_defect_qty",
+              "expression": "SUM(d.defect_qty) AS total_defect_qty",
+              "source_table": "cdw.dwd_卷烟产量明细"
+            },
+            {
+              "column": "work_order_cnt",
+              "expression": "COUNT(1) AS work_order_cnt",
+              "source_table": ""
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dwd_成品库存明细"
+          ],
+          "output_tables": [
+            "cdw.dws_库存汇总"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "k.plant_code AS plant_code",
+              "source_table": "cdw.dwd_成品库存明细"
+            },
+            {
+              "column": "brand_code",
+              "expression": "k.brand_code AS brand_code",
+              "source_table": "cdw.dwd_成品库存明细"
+            },
+            {
+              "column": "total_stock_qty",
+              "expression": "SUM(k.stock_qty) AS total_stock_qty",
+              "source_table": "cdw.dwd_成品库存明细"
+            },
+            {
+              "column": "total_stock_amt",
+              "expression": "SUM(k.stock_amt) AS total_stock_amt",
+              "source_table": "cdw.dwd_成品库存明细"
+            },
+            {
+              "column": "batch_cnt",
+              "expression": "COUNT(DISTINCT k.batch_no) AS batch_cnt",
+              "source_table": "cdw.dwd_成品库存明细"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dws_产量汇总",
+            "cdw.dwd_卷烟销量明细",
+            "cdw.dws_库存汇总"
+          ],
+          "output_tables": [
+            "cdw.dws_产销存汇总"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "a.plant_code AS plant_code",
+              "source_table": "cdw.dws_产量汇总"
+            },
+            {
+              "column": "brand_code",
+              "expression": "a.brand_code AS brand_code",
+              "source_table": "cdw.dws_产量汇总"
+            },
+            {
+              "column": "output_qty",
+              "expression": "a.total_output_qty AS output_qty",
+              "source_table": "cdw.dws_产量汇总"
+            },
+            {
+              "column": "sale_qty",
+              "expression": "COALESCE(s.total_sale_qty, 0) AS sale_qty",
+              "source_table": "cdw.dwd_卷烟销量明细"
+            },
+            {
+              "column": "stock_qty",
+              "expression": "COALESCE(k.total_stock_qty, 0) AS stock_qty",
+              "source_table": "cdw.dws_库存汇总"
+            },
+            {
+              "column": "sale_amt",
+              "expression": "COALESCE(s.total_sale_amt, 0) AS sale_amt",
+              "source_table": "cdw.dwd_卷烟销量明细"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dws_烟叶采购供应商汇总.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "cdw.dwd_烟叶采购明细",
+        "cdw.dws_烟叶采购供应商汇总"
+      ],
+      "fields": [
+        "avg_unit_price",
+        "best_leaf_grade",
+        "purchase_cnt",
+        "supplier_code",
+        "supplier_level",
+        "supplier_name",
+        "total_amt",
+        "total_weight"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dwd_烟叶采购明细"
+          ],
+          "output_tables": [
+            "cdw.dws_烟叶采购供应商汇总"
+          ],
+          "columns": [
+            {
+              "column": "supplier_code",
+              "expression": "c.supplier_code AS supplier_code",
+              "source_table": "cdw.dwd_烟叶采购明细"
+            },
+            {
+              "column": "supplier_name",
+              "expression": "c.supplier_name AS supplier_name",
+              "source_table": "cdw.dwd_烟叶采购明细"
+            },
+            {
+              "column": "supplier_level",
+              "expression": "c.supplier_level AS supplier_level",
+              "source_table": "cdw.dwd_烟叶采购明细"
+            },
+            {
+              "column": "purchase_cnt",
+              "expression": "COUNT(1) AS purchase_cnt",
+              "source_table": ""
+            },
+            {
+              "column": "total_weight",
+              "expression": "SUM(c.leaf_weight) AS total_weight",
+              "source_table": "cdw.dwd_烟叶采购明细"
+            },
+            {
+              "column": "total_amt",
+              "expression": "SUM(c.total_amt) AS total_amt",
+              "source_table": "cdw.dwd_烟叶采购明细"
+            },
+            {
+              "column": "avg_unit_price",
+              "expression": "ROUND(AVG(c.unit_price), 2) AS avg_unit_price",
+              "source_table": "cdw.dwd_烟叶采购明细"
+            },
+            {
+              "column": "best_leaf_grade",
+              "expression": "MAX(c.leaf_grade) AS best_leaf_grade",
+              "source_table": "cdw.dwd_烟叶采购明细"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dws_税利汇总.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "cdw.dwd_税利明细",
+        "cdw.dws_产量汇总",
+        "cdw.dws_税利汇总"
+      ],
+      "fields": [
+        "brand_code",
+        "plant_code",
+        "stat_month",
+        "tax_profit_per_box",
+        "total_output_qty",
+        "total_profit_amt",
+        "total_tax_amt",
+        "total_tax_profit"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dwd_税利明细",
+            "cdw.dws_产量汇总"
+          ],
+          "output_tables": [
+            "cdw.dws_税利汇总"
+          ],
+          "columns": [
+            {
+              "column": "plant_code",
+              "expression": "t.plant_code AS plant_code",
+              "source_table": "cdw.dwd_税利明细"
+            },
+            {
+              "column": "brand_code",
+              "expression": "t.brand_code AS brand_code",
+              "source_table": "cdw.dwd_税利明细"
+            },
+            {
+              "column": "stat_month",
+              "expression": "t.stat_month AS stat_month",
+              "source_table": "cdw.dwd_税利明细"
+            },
+            {
+              "column": "total_tax_amt",
+              "expression": "SUM(t.tax_amt) AS total_tax_amt",
+              "source_table": "cdw.dwd_税利明细"
+            },
+            {
+              "column": "total_profit_amt",
+              "expression": "SUM(t.profit_amt) AS total_profit_amt",
+              "source_table": "cdw.dwd_税利明细"
+            },
+            {
+              "column": "total_tax_profit",
+              "expression": "SUM(t.total_tax_profit) AS total_tax_profit",
+              "source_table": "cdw.dwd_税利明细"
+            },
+            {
+              "column": "total_output_qty",
+              "expression": "MAX(p.total_output_qty) AS total_output_qty",
+              "source_table": "cdw.dws_产量汇总"
+            },
+            {
+              "column": "tax_profit_per_box",
+              "expression": "CASE WHEN MAX(p.total_output_qty) > 0 THEN ROUND(SUM(t.total_tax_profit) / MAX(p.total_output_qty), 2) ELSE 0 END AS tax_profit_per_box",
+              "source_table": "cdw.dws_产量汇总"
+            },
+            {
+              "column": "tax_profit_per_box",
+              "expression": "CASE WHEN MAX(p.total_output_qty) > 0 THEN ROUND(SUM(t.total_tax_profit) / MAX(p.total_output_qty), 2) ELSE 0 END AS tax_profit_per_box",
+              "source_table": "cdw.dwd_税利明细"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/cdw/dws_设备效率汇总.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "cdw.dwd_设备运行明细",
+        "cdw.dws_设备效率汇总"
+      ],
+      "fields": [
+        "avg_hourly_output",
+        "device_code",
+        "device_name",
+        "device_type",
+        "plant_code",
+        "run_rate",
+        "total_output_qty",
+        "total_run_minutes",
+        "total_stop_minutes"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "cdw.dwd_设备运行明细"
+          ],
+          "output_tables": [
+            "cdw.dws_设备效率汇总"
+          ],
+          "columns": [
+            {
+              "column": "device_code",
+              "expression": "e.device_code AS device_code",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "device_name",
+              "expression": "e.device_name AS device_name",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "device_type",
+              "expression": "e.device_type AS device_type",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "plant_code",
+              "expression": "e.plant_code AS plant_code",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "total_run_minutes",
+              "expression": "SUM(e.run_minutes) AS total_run_minutes",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "total_stop_minutes",
+              "expression": "SUM(e.stop_minutes) AS total_stop_minutes",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "total_output_qty",
+              "expression": "SUM(e.output_qty) AS total_output_qty",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "avg_hourly_output",
+              "expression": "ROUND(AVG(e.hourly_output), 2) AS avg_hourly_output",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "run_rate",
+              "expression": "CASE WHEN SUM(e.run_minutes) + SUM(e.stop_minutes) > 0 THEN ROUND(SUM(e.run_minutes) / (SUM(e.run_minutes) + SUM(e.stop_minutes)), 4) ELSE 0 END AS run_rate",
+              "source_table": "cdw.dwd_设备运行明细"
+            },
+            {
+              "column": "run_rate",
+              "expression": "CASE WHEN SUM(e.run_minutes) + SUM(e.stop_minutes) > 0 THEN ROUND(SUM(e.run_minutes) / (SUM(e.run_minutes) + SUM(e.stop_minutes)), 4) ELSE 0 END AS run_rate",
+              "source_table": "cdw.dwd_设备运行明细"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ods/ods_卷烟产量流水.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "src.erp_生产工单明细",
+        "ods.ods_卷烟产量流水"
+      ],
+      "fields": [
+        "brand_code",
+        "defect_qty",
+        "output_qty",
+        "plant_code",
+        "shift_code",
+        "update_time",
+        "work_date",
+        "work_order_no"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "src.erp_生产工单明细"
+          ],
+          "output_tables": [
+            "ods.ods_卷烟产量流水"
+          ],
+          "columns": [
+            {
+              "column": "work_order_no",
+              "expression": "a.work_order_no AS work_order_no",
+              "source_table": "src.erp_生产工单明细"
+            },
+            {
+              "column": "plant_code",
+              "expression": "a.plant_code AS plant_code",
+              "source_table": "src.erp_生产工单明细"
+            },
+            {
+              "column": "brand_code",
+              "expression": "a.brand_code AS brand_code",
+              "source_table": "src.erp_生产工单明细"
+            },
+            {
+              "column": "work_date",
+              "expression": "a.work_date AS work_date",
+              "source_table": "src.erp_生产工单明细"
+            },
+            {
+              "column": "output_qty",
+              "expression": "CAST(a.output_qty AS DECIMAL(18, 4)) AS output_qty",
+              "source_table": "src.erp_生产工单明细"
+            },
+            {
+              "column": "defect_qty",
+              "expression": "CAST(a.defect_qty AS DECIMAL(18, 4)) AS defect_qty",
+              "source_table": "src.erp_生产工单明细"
+            },
+            {
+              "column": "shift_code",
+              "expression": "a.shift_code AS shift_code",
+              "source_table": "src.erp_生产工单明细"
+            },
+            {
+              "column": "update_time",
+              "expression": "a.update_time AS update_time",
+              "source_table": "src.erp_生产工单明细"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ods/ods_卷烟销量流水.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "src.mes_销售出库明细",
+        "ods.ods_卷烟销量流水"
+      ],
+      "fields": [
+        "brand_code",
+        "channel_code",
+        "customer_code",
+        "outbound_no",
+        "sale_amt",
+        "sale_date",
+        "sale_qty",
+        "update_time"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "src.mes_销售出库明细"
+          ],
+          "output_tables": [
+            "ods.ods_卷烟销量流水"
+          ],
+          "columns": [
+            {
+              "column": "outbound_no",
+              "expression": "b.outbound_no AS outbound_no",
+              "source_table": "src.mes_销售出库明细"
+            },
+            {
+              "column": "customer_code",
+              "expression": "b.customer_code AS customer_code",
+              "source_table": "src.mes_销售出库明细"
+            },
+            {
+              "column": "brand_code",
+              "expression": "b.brand_code AS brand_code",
+              "source_table": "src.mes_销售出库明细"
+            },
+            {
+              "column": "sale_date",
+              "expression": "b.sale_date AS sale_date",
+              "source_table": "src.mes_销售出库明细"
+            },
+            {
+              "column": "sale_qty",
+              "expression": "CAST(b.sale_qty AS DECIMAL(18, 4)) AS sale_qty",
+              "source_table": "src.mes_销售出库明细"
+            },
+            {
+              "column": "sale_amt",
+              "expression": "CAST(b.sale_amt AS DECIMAL(18, 2)) AS sale_amt",
+              "source_table": "src.mes_销售出库明细"
+            },
+            {
+              "column": "channel_code",
+              "expression": "b.channel_code AS channel_code",
+              "source_table": "src.mes_销售出库明细"
+            },
+            {
+              "column": "update_time",
+              "expression": "b.update_time AS update_time",
+              "source_table": "src.mes_销售出库明细"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ods/ods_成品库存快照.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "src.wms_库存快照",
+        "ods.ods_成品库存快照"
+      ],
+      "fields": [
+        "batch_no",
+        "brand_code",
+        "plant_code",
+        "stock_amt",
+        "stock_date",
+        "stock_qty",
+        "update_time",
+        "warehouse_code"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "src.wms_库存快照"
+          ],
+          "output_tables": [
+            "ods.ods_成品库存快照"
+          ],
+          "columns": [
+            {
+              "column": "warehouse_code",
+              "expression": "c.warehouse_code AS warehouse_code",
+              "source_table": "src.wms_库存快照"
+            },
+            {
+              "column": "plant_code",
+              "expression": "c.plant_code AS plant_code",
+              "source_table": "src.wms_库存快照"
+            },
+            {
+              "column": "brand_code",
+              "expression": "c.brand_code AS brand_code",
+              "source_table": "src.wms_库存快照"
+            },
+            {
+              "column": "stock_date",
+              "expression": "c.stock_date AS stock_date",
+              "source_table": "src.wms_库存快照"
+            },
+            {
+              "column": "stock_qty",
+              "expression": "CAST(c.stock_qty AS DECIMAL(18, 4)) AS stock_qty",
+              "source_table": "src.wms_库存快照"
+            },
+            {
+              "column": "stock_amt",
+              "expression": "CAST(c.stock_amt AS DECIMAL(18, 2)) AS stock_amt",
+              "source_table": "src.wms_库存快照"
+            },
+            {
+              "column": "batch_no",
+              "expression": "c.batch_no AS batch_no",
+              "source_table": "src.wms_库存快照"
+            },
+            {
+              "column": "update_time",
+              "expression": "c.update_time AS update_time",
+              "source_table": "src.wms_库存快照"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ods/ods_烟叶采购到货.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "src.srm_采购到货单",
+        "ods.ods_烟叶采购到货"
+      ],
+      "fields": [
+        "leaf_grade",
+        "leaf_weight",
+        "origin_area",
+        "purchase_no",
+        "receive_date",
+        "supplier_code",
+        "unit_price",
+        "update_time"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "src.srm_采购到货单"
+          ],
+          "output_tables": [
+            "ods.ods_烟叶采购到货"
+          ],
+          "columns": [
+            {
+              "column": "purchase_no",
+              "expression": "e.purchase_no AS purchase_no",
+              "source_table": "src.srm_采购到货单"
+            },
+            {
+              "column": "supplier_code",
+              "expression": "e.supplier_code AS supplier_code",
+              "source_table": "src.srm_采购到货单"
+            },
+            {
+              "column": "leaf_grade",
+              "expression": "e.leaf_grade AS leaf_grade",
+              "source_table": "src.srm_采购到货单"
+            },
+            {
+              "column": "origin_area",
+              "expression": "e.origin_area AS origin_area",
+              "source_table": "src.srm_采购到货单"
+            },
+            {
+              "column": "receive_date",
+              "expression": "e.receive_date AS receive_date",
+              "source_table": "src.srm_采购到货单"
+            },
+            {
+              "column": "leaf_weight",
+              "expression": "CAST(e.leaf_weight AS DECIMAL(18, 4)) AS leaf_weight",
+              "source_table": "src.srm_采购到货单"
+            },
+            {
+              "column": "unit_price",
+              "expression": "CAST(e.unit_price AS DECIMAL(18, 2)) AS unit_price",
+              "source_table": "src.srm_采购到货单"
+            },
+            {
+              "column": "update_time",
+              "expression": "e.update_time AS update_time",
+              "source_table": "src.srm_采购到货单"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ods/ods_税利上缴流水.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "src.fin_税金凭证",
+        "ods.ods_税利上缴流水"
+      ],
+      "fields": [
+        "brand_code",
+        "plant_code",
+        "profit_amt",
+        "stat_month",
+        "tax_amt",
+        "tax_type",
+        "update_time",
+        "voucher_no"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "src.fin_税金凭证"
+          ],
+          "output_tables": [
+            "ods.ods_税利上缴流水"
+          ],
+          "columns": [
+            {
+              "column": "voucher_no",
+              "expression": "d.voucher_no AS voucher_no",
+              "source_table": "src.fin_税金凭证"
+            },
+            {
+              "column": "plant_code",
+              "expression": "d.plant_code AS plant_code",
+              "source_table": "src.fin_税金凭证"
+            },
+            {
+              "column": "brand_code",
+              "expression": "d.brand_code AS brand_code",
+              "source_table": "src.fin_税金凭证"
+            },
+            {
+              "column": "tax_type",
+              "expression": "d.tax_type AS tax_type",
+              "source_table": "src.fin_税金凭证"
+            },
+            {
+              "column": "stat_month",
+              "expression": "d.stat_month AS stat_month",
+              "source_table": "src.fin_税金凭证"
+            },
+            {
+              "column": "tax_amt",
+              "expression": "CAST(d.tax_amt AS DECIMAL(18, 2)) AS tax_amt",
+              "source_table": "src.fin_税金凭证"
+            },
+            {
+              "column": "profit_amt",
+              "expression": "CAST(d.profit_amt AS DECIMAL(18, 2)) AS profit_amt",
+              "source_table": "src.fin_税金凭证"
+            },
+            {
+              "column": "update_time",
+              "expression": "d.update_time AS update_time",
+              "source_table": "src.fin_税金凭证"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_script": "examples/warehouse/ods/ods_设备运行工况.sql",
+      "ok": true,
+      "error": null,
+      "tables": [
+        "src.iot_设备工况采集",
+        "ods.ods_设备运行工况"
+      ],
+      "fields": [
+        "device_code",
+        "device_type",
+        "output_qty",
+        "plant_code",
+        "run_date",
+        "run_minutes",
+        "stop_minutes",
+        "update_time"
+      ],
+      "statements": [
+        {
+          "index": 1,
+          "task_type": "INSERT_SELECT",
+          "input_tables": [
+            "src.iot_设备工况采集"
+          ],
+          "output_tables": [
+            "ods.ods_设备运行工况"
+          ],
+          "columns": [
+            {
+              "column": "device_code",
+              "expression": "f.device_code AS device_code",
+              "source_table": "src.iot_设备工况采集"
+            },
+            {
+              "column": "device_type",
+              "expression": "f.device_type AS device_type",
+              "source_table": "src.iot_设备工况采集"
+            },
+            {
+              "column": "plant_code",
+              "expression": "f.plant_code AS plant_code",
+              "source_table": "src.iot_设备工况采集"
+            },
+            {
+              "column": "run_date",
+              "expression": "f.run_date AS run_date",
+              "source_table": "src.iot_设备工况采集"
+            },
+            {
+              "column": "run_minutes",
+              "expression": "CAST(f.run_minutes AS BIGINT) AS run_minutes",
+              "source_table": "src.iot_设备工况采集"
+            },
+            {
+              "column": "stop_minutes",
+              "expression": "CAST(f.stop_minutes AS BIGINT) AS stop_minutes",
+              "source_table": "src.iot_设备工况采集"
+            },
+            {
+              "column": "output_qty",
+              "expression": "CAST(f.output_qty AS DECIMAL(18, 4)) AS output_qty",
+              "source_table": "src.iot_设备工况采集"
+            },
+            {
+              "column": "update_time",
+              "expression": "f.update_time AS update_time",
+              "source_table": "src.iot_设备工况采集"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "subject": "ads.ads_产销存月报.sale_output_ratio",
+      "chinese_name": "销产比",
+      "formula": "销产比 = ROUND(销量 / NULLIF(产量, 0), 4)",
+      "depends_on": [
+        {
+          "table": "cdw.dws_产销存汇总",
+          "column": "sale_qty"
+        },
+        {
+          "table": "cdw.dws_产销存汇总",
+          "column": "output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对销量与产量做了除法计算，并用 NULLIF 处理产量为 0 的情况、ROUND 保留 4 位，属于有业务含义的派生比率指标，可被下游复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_产销存月报.stock_increase",
+      "chinese_name": "库存增量",
+      "formula": "库存增量 = 产量 - 销量",
+      "depends_on": [
+        {
+          "table": "cdw.dws_产销存汇总",
+          "column": "output_qty"
+        },
+        {
+          "table": "cdw.dws_产销存汇总",
+          "column": "sale_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "source_line": 1,
+      "confidence": 0.85,
+      "reason": "由产量与销量相减得到，是对产销存关系中库存变化的口径化计算，非单纯字段搬运，可被下游复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_烟叶供应商排名.amount_rank",
+      "chinese_name": "供应商采购金额排名",
+      "formula": "amount_rank = 按 total_amt 降序对供应商行号排名（ROW_NUMBER）",
+      "depends_on": [
+        {
+          "table": "ads.ads_烟叶供应商排名",
+          "column": "total_amt"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_烟叶供应商排名.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "该字段由 ROW_NUMBER() OVER (ORDER BY c.total_amt DESC) 计算得到，是对采购金额的排序排名，属可复用的派生指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_烟叶供应商排名.weight_rank",
+      "chinese_name": "供应商采购重量排名",
+      "formula": "weight_rank = 按 total_weight 降序对供应商密集排名（DENSE_RANK）",
+      "depends_on": [
+        {
+          "table": "ads.ads_烟叶供应商排名",
+          "column": "total_weight"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_烟叶供应商排名.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "该字段由 DENSE_RANK() OVER (ORDER BY c.total_weight DESC) 计算得到，是对采购重量的密集排名，属可复用的派生指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_税利分析.tax_profit_per_sale_box",
+      "chinese_name": "单箱销量税利",
+      "formula": "单箱销量税利 = ROUND(税利总额 / 销量, 2)，销量为 0 时取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dws_税利汇总",
+          "column": "total_tax_profit"
+        },
+        {
+          "table": "cdw.dws_产销存汇总",
+          "column": "sale_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_税利分析.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "该字段由 CASE + ROUND + 除法计算得出，且已有中文业务含义的单箱税利，可被下游指标（如 ads.ads_税利分析、ads.ads_经营指标明细）复用，属于典型派生指标口径。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_税利分析.sale_qty",
+      "chinese_name": "销量",
+      "formula": "销量 = COALESCE(产销存销量, 0)，即缺失销量按 0 处理",
+      "depends_on": [
+        {
+          "table": "cdw.dws_产销存汇总",
+          "column": "sale_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_税利分析.sql",
+      "source_line": 1,
+      "confidence": 0.5,
+      "reason": "用 COALESCE 对销量做了空值填充，直接影响单箱销量税利的分母口径；但本质仍是字段搬运加空值处理，仅作为口径补充候选。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_经营指标驾驶舱.output_qty",
+      "chinese_name": "工厂产量合计",
+      "formula": "output_qty = SUM(经营指标明细.output_qty)，按工厂分组",
+      "depends_on": [
+        {
+          "table": "ads.ads_经营指标明细",
+          "column": "output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_经营指标驾驶舱.sql",
+      "source_line": 2,
+      "confidence": 0.9,
+      "reason": "对明细产量做了 SUM 聚合，并按 plant_code、plant_name 分组，是可被下游复用的工厂级派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_经营指标驾驶舱.sale_qty",
+      "chinese_name": "工厂销量合计",
+      "formula": "sale_qty = SUM(经营指标明细.sale_qty)，按工厂分组",
+      "depends_on": [
+        {
+          "table": "ads.ads_经营指标明细",
+          "column": "sale_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_经营指标驾驶舱.sql",
+      "source_line": 2,
+      "confidence": 0.9,
+      "reason": "对明细销量做了 SUM 聚合，按工厂分组，属于可复用的工厂级派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_经营指标驾驶舱.sale_amt",
+      "chinese_name": "工厂销售额合计",
+      "formula": "sale_amt = SUM(经营指标明细.sale_amt)，按工厂分组",
+      "depends_on": [
+        {
+          "table": "ads.ads_经营指标明细",
+          "column": "sale_amt"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_经营指标驾驶舱.sql",
+      "source_line": 2,
+      "confidence": 0.9,
+      "reason": "对明细销售额做了 SUM 聚合，按工厂分组，是可复用的工厂级派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_经营指标驾驶舱.tax_profit",
+      "chinese_name": "工厂税利合计",
+      "formula": "tax_profit = SUM(经营指标明细.tax_profit)，按工厂分组",
+      "depends_on": [
+        {
+          "table": "ads.ads_经营指标明细",
+          "column": "tax_profit"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_经营指标驾驶舱.sql",
+      "source_line": 2,
+      "confidence": 0.9,
+      "reason": "对明细税利做了 SUM 聚合，按工厂分组，属于可复用的工厂级派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_经营指标驾驶舱.avg_sale_output_ratio",
+      "chinese_name": "工厂平均产销率",
+      "formula": "avg_sale_output_ratio = AVG(经营指标明细.sale_output_ratio) 后四舍五入到固定小数位，按工厂分组",
+      "depends_on": [
+        {
+          "table": "ads.ads_经营指标明细",
+          "column": "sale_output_ratio"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_经营指标驾驶舱.sql",
+      "source_line": 2,
+      "confidence": 0.85,
+      "reason": "对产销率做了 AVG 聚合并套用 ROUND，是比率类派生指标，需固定口径",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_经营指标驾驶舱.max_supplier_amt",
+      "chinese_name": "供应商采购额最大值",
+      "formula": "max_supplier_amt = MAX(烟叶供应商排名.total_amt)，按工厂分组",
+      "depends_on": [
+        {
+          "table": "ads.ads_烟叶供应商排名",
+          "column": "total_amt"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_经营指标驾驶舱.sql",
+      "source_line": 2,
+      "confidence": 0.7,
+      "reason": "对供应商排名的 total_amt 做了 MAX 聚合，属派生指标；口径含义依赖与经营指标明细的关联，建议明确后再固化",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_经营指标驾驶舱.max_device_run_rate",
+      "chinese_name": "设备运行率最大值",
+      "formula": "max_device_run_rate = MAX(设备运行看板.avg_run_rate)，按工厂分组",
+      "depends_on": [
+        {
+          "table": "ads.ads_设备运行看板",
+          "column": "avg_run_rate"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_经营指标驾驶舱.sql",
+      "source_line": 2,
+      "confidence": 0.7,
+      "reason": "对设备运行看板的 avg_run_rate 做了 MAX 聚合，属派生指标；与工厂级分组口径需固化后复用",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_设备运行看板.device_cnt",
+      "chinese_name": "设备数量",
+      "formula": "设备数量 = 按工厂与设备类型分组后的记录数计数",
+      "depends_on": [
+        {
+          "table": "cdw.dws_设备效率汇总",
+          "column": "plant_code"
+        },
+        {
+          "table": "cdw.dws_设备效率汇总",
+          "column": "device_type"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_设备运行看板.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对来源表做 COUNT(1) 聚合，并按 plant_code、device_type 分组，属于可被下游复用的派生指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_设备运行看板.run_minutes",
+      "chinese_name": "运行时长",
+      "formula": "运行时长 = 运行分钟数求和",
+      "depends_on": [
+        {
+          "table": "cdw.dws_设备效率汇总",
+          "column": "total_run_minutes"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_设备运行看板.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 total_run_minutes 做 SUM 聚合，是设备运行看板的核心汇总指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_设备运行看板.stop_minutes",
+      "chinese_name": "停机时长",
+      "formula": "停机时长 = 停机分钟数求和",
+      "depends_on": [
+        {
+          "table": "cdw.dws_设备效率汇总",
+          "column": "total_stop_minutes"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_设备运行看板.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 total_stop_minutes 做 SUM 聚合，是设备运行看板的核心汇总指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_设备运行看板.output_qty",
+      "chinese_name": "产量",
+      "formula": "产量 = 总产出数量求和",
+      "depends_on": [
+        {
+          "table": "cdw.dws_设备效率汇总",
+          "column": "total_output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_设备运行看板.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 total_output_qty 做 SUM 聚合，是设备产出汇总指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_设备运行看板.avg_run_rate",
+      "chinese_name": "平均运行率",
+      "formula": "平均运行率 = 运行率的平均值并做四舍五入处理",
+      "depends_on": [
+        {
+          "table": "cdw.dws_设备效率汇总",
+          "column": "run_rate"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_设备运行看板.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 run_rate 做 AVG 并套 ROUND，属于有业务含义的派生指标，可被下游复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_设备运行看板.low_run_rate_device_cnt",
+      "chinese_name": "低运行率设备数",
+      "formula": "低运行率设备数 = 运行率低于阈值的设备计数求和",
+      "depends_on": [
+        {
+          "table": "cdw.dws_设备效率汇总",
+          "column": "run_rate"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_设备运行看板.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 run_rate 做 CASE WHEN 条件计数并 SUM，是明确的口径型派生指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_卷烟产量明细.output_qty_cig",
+      "chinese_name": "卷烟支数产量",
+      "formula": "卷烟支数产量 = 卷烟产量 × 250",
+      "depends_on": [
+        {
+          "table": "ods.ods_卷烟产量流水",
+          "column": "output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_卷烟产量明细.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 output_qty 做了乘法计算（p.output_qty * 250）生成新字段，属于跨单位换算的派生指标，下游可复用",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_卷烟产量明细.defect_rate",
+      "chinese_name": "卷烟缺陷率",
+      "formula": "卷烟缺陷率 = 缺陷量 / 卷烟产量（产量>0 时，ROUND 保留 6 位；产量≤0 时取 0）",
+      "depends_on": [
+        {
+          "table": "ods.ods_卷烟产量流水",
+          "column": "defect_qty"
+        },
+        {
+          "table": "ods.ods_卷烟产量流水",
+          "column": "output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_卷烟产量明细.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "使用 CASE WHEN + ROUND + 除法构造的比率型派生指标，含除零保护，属于有业务含义、可被下游复用的口径",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_卷烟销量明细.unit_price",
+      "chinese_name": "销售单价",
+      "formula": "销售单价 = 销售额 / 销量（销量大于零时按分单位四舍五入，销量不大于零时取零）",
+      "depends_on": [
+        {
+          "table": "ods.ods_卷烟销量流水",
+          "column": "sale_amt"
+        },
+        {
+          "table": "ods.ods_卷烟销量流水",
+          "column": "sale_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_卷烟销量明细.sql",
+      "source_line": 1,
+      "confidence": 0.92,
+      "reason": "该字段不是字段搬运，而是对 ods.ods_卷烟销量流水 的 sale_amt 与 sale_qty 做除法并带 CASE 除零保护与 ROUND 取整后落到 cdw.dwd_卷烟销量明细，属于可被下游复用的派生指标，且可用字段清单中已存在 unit_price / avg_unit_price，具备口径沉淀价值。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_成品库存明细.stock_unit_cost",
+      "chinese_name": "库存单位成本",
+      "formula": "库存单位成本 = ROUND(库存金额 / NULLIF(库存数量, 0), 2)",
+      "depends_on": [
+        {
+          "table": "ods.ods_成品库存快照",
+          "column": "stock_amt"
+        },
+        {
+          "table": "ods.ods_成品库存快照",
+          "column": "stock_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_成品库存明细.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "该字段由 stock_amt 与 stock_qty 相除并用 NULLIF 防零、ROUND 保留两位计算得出，属于派生计算字段，可被下游库存相关指标复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_烟叶采购明细.total_amt",
+      "chinese_name": "采购总金额",
+      "formula": "采购总金额 = ROUND(烟叶重量 × 单价, 2)",
+      "depends_on": [
+        {
+          "table": "ods.ods_烟叶采购到货",
+          "column": "leaf_weight"
+        },
+        {
+          "table": "ods.ods_烟叶采购到货",
+          "column": "unit_price"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_烟叶采购明细.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "该字段由 leaf_weight 与 unit_price 相乘并用 ROUND 保留两位小数计算得出，是对指标做计算加工的派生字段，具有业务含义（采购金额），可被下游复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_税利明细.total_tax_profit",
+      "chinese_name": "税利合计",
+      "formula": "税利合计 = 上缴税额 + 利润额",
+      "depends_on": [
+        {
+          "table": "ods.ods_税利上缴流水",
+          "column": "tax_amt"
+        },
+        {
+          "table": "ods.ods_税利上缴流水",
+          "column": "profit_amt"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_税利明细.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "该字段不是字段搬运，而是对 tax_amt 与 profit_amt 做加法计算得到的派生指标，具有业务含义（税利合计），可被 cdw.dws_税利汇总 等下游复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_设备运行明细.total_minutes",
+      "chinese_name": "设备总运行分钟数",
+      "formula": "总运行分钟数 = 运行分钟数 + 停机分钟数",
+      "depends_on": [
+        {
+          "table": "ods.ods_设备运行工况",
+          "column": "run_minutes"
+        },
+        {
+          "table": "ods.ods_设备运行工况",
+          "column": "stop_minutes"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_设备运行明细.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "目标表 field total_minutes 由 run_minutes + stop_minutes 相加得出，属派生计算字段，可被下游设备效率类汇总复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_设备运行明细.hourly_output",
+      "chinese_name": "台时产量",
+      "formula": "台时产量 = 产量 × 60 ÷ 运行分钟数（运行分钟数为 0 时取 0，结果四舍五入保留 2 位）",
+      "depends_on": [
+        {
+          "table": "ods.ods_设备运行工况",
+          "column": "output_qty"
+        },
+        {
+          "table": "ods.ods_设备运行工况",
+          "column": "run_minutes"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_设备运行明细.sql",
+      "source_line": 1,
+      "confidence": 0.95,
+      "reason": "目标字段 hourly_output 使用 CASE WHEN run_minutes > 0 结合 ROUND(output_qty * 60 / run_minutes, 2)，含除零保护与精度处理，是有业务含义的派生指标，值得固化为口径。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产量汇总.total_output_qty",
+      "chinese_name": "总产量",
+      "formula": "总产量 = 按 plant_code、brand_code 分组对 cdw.dwd_卷烟产量明细.output_qty 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量明细",
+          "column": "output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 1,
+      "confidence": 0.95,
+      "reason": "对 output_qty 做了 SUM 聚合，按 plant_code、brand_code 粒度落库，是可被下游复用的派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产量汇总.total_defect_qty",
+      "chinese_name": "总次品量",
+      "formula": "总次品量 = 按 plant_code、brand_code 分组对 cdw.dwd_卷烟产量明细.defect_qty 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量明细",
+          "column": "defect_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 1,
+      "confidence": 0.95,
+      "reason": "对 defect_qty 做了 SUM 聚合，按 plant_code、brand_code 粒度落库，可与总产量配合计算缺陷率等指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产量汇总.work_order_cnt",
+      "chinese_name": "工单数",
+      "formula": "工单数 = 按 plant_code、brand_code 分组统计 cdw.dwd_卷烟产量明细 的行数（COUNT(1)）",
+      "depends_on": [],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 1,
+      "confidence": 0.7,
+      "reason": "COUNT(1) 计数聚合，按 plant_code、brand_code 分组，是产量明细的计数类派生指标；计数按行进行，未引用具体字段",
+      "check": {
+        "ok": false,
+        "problems": [
+          {
+            "code": "missing_depends_on",
+            "field": "depends_on",
+            "message": "缺依赖字段（至少 1 条）"
+          }
+        ],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_库存汇总.total_stock_qty",
+      "chinese_name": "库存总量",
+      "formula": "库存总量 = 按工厂+品牌分组的成品库存明细 stock_qty 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_成品库存明细",
+          "column": "stock_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 2,
+      "confidence": 0.9,
+      "reason": "该字段由 SUM(k.stock_qty) 聚合而来，是可被下游复用的库存数量派生指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_库存汇总.total_stock_amt",
+      "chinese_name": "库存总金额",
+      "formula": "库存总金额 = 按工厂+品牌分组的成品库存明细 stock_amt 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_成品库存明细",
+          "column": "stock_amt"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 2,
+      "confidence": 0.9,
+      "reason": "该字段由 SUM(k.stock_amt) 聚合而来，是可被下游复用的库存金额派生指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_库存汇总.batch_cnt",
+      "chinese_name": "批次数",
+      "formula": "批次数 = 按工厂+品牌分组对成品库存明细 batch_no 去重计数",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_成品库存明细",
+          "column": "batch_no"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 2,
+      "confidence": 0.85,
+      "reason": "该字段由 COUNT(DISTINCT k.batch_no) 去重计数而来，具有业务含义可复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产销存汇总.sale_qty",
+      "chinese_name": "销量",
+      "formula": "销量 = SUM(卷烟销量明细.sale_qty)，按 plant_code、brand_code 汇总，无销量时取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "sale_qty"
+        },
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "plant_code"
+        },
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "brand_code"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 3,
+      "confidence": 0.85,
+      "reason": "对 cdw.dwd_卷烟销量明细 的 sale_qty 做了 SUM 聚合并按 plant_code、brand_code 分组，再用 COALESCE 补 0，是产销存口径中的核心派生指标，可被下游复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产销存汇总.sale_amt",
+      "chinese_name": "销售额",
+      "formula": "销售额 = SUM(卷烟销量明细.sale_amt)，按 plant_code、brand_code 汇总，无数据时取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "sale_amt"
+        },
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "plant_code"
+        },
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "brand_code"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 3,
+      "confidence": 0.85,
+      "reason": "对 cdw.dwd_卷烟销量明细 的 sale_amt 做了 SUM 聚合并按 plant_code、brand_code 分组，再用 COALESCE 补 0，与 sale_qty 同源成对出现，属可复用派生指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产销存汇总.stock_qty",
+      "chinese_name": "库存量",
+      "formula": "库存量 = 库存汇总.total_stock_qty，按 plant_code、brand_code 对齐，缺失时取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dws_库存汇总",
+          "column": "total_stock_qty"
+        },
+        {
+          "table": "cdw.dws_库存汇总",
+          "column": "plant_code"
+        },
+        {
+          "table": "cdw.dws_库存汇总",
+          "column": "brand_code"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 3,
+      "confidence": 0.6,
+      "reason": "来自 cdw.dws_库存汇总 的 total_stock_qty，经 COALESCE 补 0 后按 plant_code、brand_code 落到产销存主体，属于跨表对齐后的口径约定；但本语句未对其做二次计算。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_烟叶采购供应商汇总.purchase_cnt",
+      "chinese_name": "采购笔数",
+      "formula": "采购笔数 = 按供应商分组的采购明细记录数（COUNT(1)）",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_烟叶采购明细",
+          "column": "supplier_code"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_烟叶采购供应商汇总.sql",
+      "source_line": 1,
+      "confidence": 0.85,
+      "reason": "对明细做了 COUNT(1) 聚合，按 supplier_code/supplier_name/supplier_level 分组，是可复用的供应商采购频次口径",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_烟叶采购供应商汇总.total_weight",
+      "chinese_name": "采购总重量",
+      "formula": "采购总重量 = SUM(烟叶重量)，按供应商分组汇总",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_烟叶采购明细",
+          "column": "leaf_weight"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_烟叶采购供应商汇总.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 leaf_weight 做了 SUM 聚合，输出字段名为 total_weight，属供应商维度派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_烟叶采购供应商汇总.total_amt",
+      "chinese_name": "采购总金额",
+      "formula": "采购总金额 = SUM(采购金额)，按供应商分组汇总",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_烟叶采购明细",
+          "column": "total_amt"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_烟叶采购供应商汇总.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 total_amt 做了 SUM 聚合，是供应商采购金额口径",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_烟叶采购供应商汇总.avg_unit_price",
+      "chinese_name": "平均采购单价",
+      "formula": "平均采购单价 = ROUND(AVG(单价), 2)，按供应商分组取均值并保留两位小数",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_烟叶采购明细",
+          "column": "unit_price"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_烟叶采购供应商汇总.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 unit_price 做了 AVG 并 ROUND 到 2 位，属于计算型派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_烟叶采购供应商汇总.best_leaf_grade",
+      "chinese_name": "最优烟叶等级",
+      "formula": "最优烟叶等级 = MAX(烟叶等级)，按供应商分组取最大值",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_烟叶采购明细",
+          "column": "leaf_grade"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_烟叶采购供应商汇总.sql",
+      "source_line": 1,
+      "confidence": 0.6,
+      "reason": "对 leaf_grade 做了 MAX 聚合，输出名 best_leaf_grade 带业务含义，但等级取 MAX 的业务解释需确认",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_税利汇总.tax_profit_per_box",
+      "chinese_name": "单箱税利",
+      "formula": "单箱税利 = 当产量 > 0 时，ROUND(SUM(税利明细.total_tax_profit) / MAX(产量汇总.total_output_qty), 2)，否则取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_税利明细",
+          "column": "total_tax_profit"
+        },
+        {
+          "table": "cdw.dws_产量汇总",
+          "column": "total_output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_税利汇总.sql",
+      "source_line": 1,
+      "confidence": 0.95,
+      "reason": "该字段由 SUM 聚合值除以 MAX 聚合值并 ROUND 取两位、且用 CASE WHEN 处理分母为 0 的边界，属于典型派生比率指标，可被下游税利分析复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_税利汇总.total_tax_profit",
+      "chinese_name": "税利总额",
+      "formula": "税利总额 = SUM(税利明细.total_tax_profit)",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_税利明细",
+          "column": "total_tax_profit"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_税利汇总.sql",
+      "source_line": 1,
+      "confidence": 0.8,
+      "reason": "对税利明细的税利字段做 SUM 聚合，是单箱税利的分子，属于可复用的汇总指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_税利汇总.total_tax_amt",
+      "chinese_name": "税金总额",
+      "formula": "税金总额 = SUM(税利明细.tax_amt)",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_税利明细",
+          "column": "tax_amt"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_税利汇总.sql",
+      "source_line": 1,
+      "confidence": 0.7,
+      "reason": "对税利明细税金字段做 SUM 聚合形成月度汇总指标，口径需固定避免下游重复定义。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_税利汇总.total_profit_amt",
+      "chinese_name": "利润总额",
+      "formula": "利润总额 = SUM(税利明细.profit_amt)",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_税利明细",
+          "column": "profit_amt"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_税利汇总.sql",
+      "source_line": 1,
+      "confidence": 0.7,
+      "reason": "对税利明细利润字段做 SUM 聚合形成月度汇总指标，属于可复用的汇总口径。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_税利汇总.total_output_qty",
+      "chinese_name": "总产量",
+      "formula": "总产量 = MAX(产量汇总.total_output_qty)",
+      "depends_on": [
+        {
+          "table": "cdw.dws_产量汇总",
+          "column": "total_output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_税利汇总.sql",
+      "source_line": 1,
+      "confidence": 0.65,
+      "reason": "取自产量汇总并按厂牌汇总取 MAX，是单箱税利的分母，需要明确其取值口径以免下游误用为 SUM。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_设备效率汇总.total_run_minutes",
+      "chinese_name": "累计运行时长",
+      "formula": "累计运行时长 = 按设备分组对 run_minutes 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_设备运行明细",
+          "column": "run_minutes"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_设备效率汇总.sql",
+      "source_line": 1,
+      "confidence": 0.82,
+      "reason": "对明细表的 run_minutes 做了 SUM 聚合，落成设备粒度的累计运行时长，是运行率的分子，可被下游复用",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_设备效率汇总.total_stop_minutes",
+      "chinese_name": "累计停机时长",
+      "formula": "累计停机时长 = 按设备分组对 stop_minutes 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_设备运行明细",
+          "column": "stop_minutes"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_设备效率汇总.sql",
+      "source_line": 1,
+      "confidence": 0.82,
+      "reason": "对明细表的 stop_minutes 做了 SUM 聚合，落成设备粒度的累计停机时长，是运行率的分母组成部分",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_设备效率汇总.total_output_qty",
+      "chinese_name": "累计产量",
+      "formula": "累计产量 = 按设备分组对 output_qty 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_设备运行明细",
+          "column": "output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_设备效率汇总.sql",
+      "source_line": 1,
+      "confidence": 0.78,
+      "reason": "对明细表的 output_qty 做了 SUM 聚合，得到设备粒度累计产量，属于可复用的产出类派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_设备效率汇总.avg_hourly_output",
+      "chinese_name": "平均小时产量",
+      "formula": "平均小时产量 = 按设备分组对 hourly_output 求平均后做四舍五入",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_设备运行明细",
+          "column": "hourly_output"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_设备效率汇总.sql",
+      "source_line": 1,
+      "confidence": 0.8,
+      "reason": "对 hourly_output 做了 AVG 聚合并做 ROUND 处理，是设备效率的平均能力口径，可被下游报表复用",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_设备效率汇总.run_rate",
+      "chinese_name": "运行率",
+      "formula": "运行率 = 累计运行时长 / (累计运行时长 + 累计停机时长)，分母为零时取零",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_设备运行明细",
+          "column": "run_minutes"
+        },
+        {
+          "table": "cdw.dwd_设备运行明细",
+          "column": "stop_minutes"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_设备效率汇总.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "用 CASE 处理除零并做 ROUND，按设备粒度把累计运行时长与累计停机时长合成为比率型效率指标，业务含义明确且下游复用价值高",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    }
+  ],
+  "sample": [
+    {
+      "subject": "ads.ads_税利分析.sale_qty",
+      "chinese_name": "销量",
+      "formula": "销量 = COALESCE(产销存销量, 0)，即缺失销量按 0 处理",
+      "depends_on": [
+        {
+          "table": "cdw.dws_产销存汇总",
+          "column": "sale_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_税利分析.sql",
+      "source_line": 1,
+      "confidence": 0.5,
+      "reason": "用 COALESCE 对销量做了空值填充，直接影响单箱销量税利的分母口径；但本质仍是字段搬运加空值处理，仅作为口径补充候选。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产销存汇总.stock_qty",
+      "chinese_name": "库存量",
+      "formula": "库存量 = 库存汇总.total_stock_qty，按 plant_code、brand_code 对齐，缺失时取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dws_库存汇总",
+          "column": "total_stock_qty"
+        },
+        {
+          "table": "cdw.dws_库存汇总",
+          "column": "plant_code"
+        },
+        {
+          "table": "cdw.dws_库存汇总",
+          "column": "brand_code"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 3,
+      "confidence": 0.6,
+      "reason": "来自 cdw.dws_库存汇总 的 total_stock_qty，经 COALESCE 补 0 后按 plant_code、brand_code 落到产销存主体，属于跨表对齐后的口径约定；但本语句未对其做二次计算。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_烟叶采购供应商汇总.best_leaf_grade",
+      "chinese_name": "最优烟叶等级",
+      "formula": "最优烟叶等级 = MAX(烟叶等级)，按供应商分组取最大值",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_烟叶采购明细",
+          "column": "leaf_grade"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_烟叶采购供应商汇总.sql",
+      "source_line": 1,
+      "confidence": 0.6,
+      "reason": "对 leaf_grade 做了 MAX 聚合，输出名 best_leaf_grade 带业务含义，但等级取 MAX 的业务解释需确认",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产销存汇总.sale_amt",
+      "chinese_name": "销售额",
+      "formula": "销售额 = SUM(卷烟销量明细.sale_amt)，按 plant_code、brand_code 汇总，无数据时取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "sale_amt"
+        },
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "plant_code"
+        },
+        {
+          "table": "cdw.dwd_卷烟销量明细",
+          "column": "brand_code"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 3,
+      "confidence": 0.85,
+      "reason": "对 cdw.dwd_卷烟销量明细 的 sale_amt 做了 SUM 聚合并按 plant_code、brand_code 分组，再用 COALESCE 补 0，与 sale_qty 同源成对出现，属可复用派生指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dwd_卷烟产量明细.output_qty_cig",
+      "chinese_name": "卷烟支数产量",
+      "formula": "卷烟支数产量 = 卷烟产量 × 250",
+      "depends_on": [
+        {
+          "table": "ods.ods_卷烟产量流水",
+          "column": "output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dwd_卷烟产量明细.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "对 output_qty 做了乘法计算（p.output_qty * 250）生成新字段，属于跨单位换算的派生指标，下游可复用",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "ads.ads_税利分析.tax_profit_per_sale_box",
+      "chinese_name": "单箱销量税利",
+      "formula": "单箱销量税利 = ROUND(税利总额 / 销量, 2)，销量为 0 时取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dws_税利汇总",
+          "column": "total_tax_profit"
+        },
+        {
+          "table": "cdw.dws_产销存汇总",
+          "column": "sale_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_税利分析.sql",
+      "source_line": 1,
+      "confidence": 0.9,
+      "reason": "该字段由 CASE + ROUND + 除法计算得出，且已有中文业务含义的单箱税利，可被下游指标（如 ads.ads_税利分析、ads.ads_经营指标明细）复用，属于典型派生指标口径。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_税利汇总.total_tax_profit",
+      "chinese_name": "税利总额",
+      "formula": "税利总额 = SUM(税利明细.total_tax_profit)",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_税利明细",
+          "column": "total_tax_profit"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_税利汇总.sql",
+      "source_line": 1,
+      "confidence": 0.8,
+      "reason": "对税利明细的税利字段做 SUM 聚合，是单箱税利的分子，属于可复用的汇总指标。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产量汇总.total_output_qty",
+      "chinese_name": "总产量",
+      "formula": "总产量 = 按 plant_code、brand_code 分组对 cdw.dwd_卷烟产量明细.output_qty 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量明细",
+          "column": "output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 1,
+      "confidence": 0.95,
+      "reason": "对 output_qty 做了 SUM 聚合，按 plant_code、brand_code 粒度落库，是可被下游复用的派生指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_产量汇总.total_defect_qty",
+      "chinese_name": "总次品量",
+      "formula": "总次品量 = 按 plant_code、brand_code 分组对 cdw.dwd_卷烟产量明细.defect_qty 求和",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量明细",
+          "column": "defect_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_产销存汇总.sql",
+      "source_line": 1,
+      "confidence": 0.95,
+      "reason": "对 defect_qty 做了 SUM 聚合，按 plant_code、brand_code 粒度落库，可与总产量配合计算缺陷率等指标",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    },
+    {
+      "subject": "cdw.dws_税利汇总.tax_profit_per_box",
+      "chinese_name": "单箱税利",
+      "formula": "单箱税利 = 当产量 > 0 时，ROUND(SUM(税利明细.total_tax_profit) / MAX(产量汇总.total_output_qty), 2)，否则取 0",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_税利明细",
+          "column": "total_tax_profit"
+        },
+        {
+          "table": "cdw.dws_产量汇总",
+          "column": "total_output_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/cdw/dws_税利汇总.sql",
+      "source_line": 1,
+      "confidence": 0.95,
+      "reason": "该字段由 SUM 聚合值除以 MAX 聚合值并 ROUND 取两位、且用 CASE WHEN 处理分母为 0 的边界，属于典型派生比率指标，可被下游税利分析复用。",
+      "check": {
+        "ok": true,
+        "problems": [],
+        "violations": [],
+        "identifier_notes": []
+      }
+    }
+  ],
+  "errors": []
+}
