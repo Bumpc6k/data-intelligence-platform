@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from lineage_client import LineageClient
 
 from . import store
-from .routers import agent, audit, health, lineage, reports
+from .routers import agent, audit, health, knowledge, lineage, reports
 
 settings = load_settings()
 
@@ -30,6 +30,13 @@ async def lifespan(_app: FastAPI):
         store.init_schema()
     except Exception as exc:  # noqa: BLE001
         print(f"[portal-api] 数据库不可用，审计将不落库：{exc}")
+    try:
+        # 候选池与口径库（M3-01 / Issue #12）：各自 try —— 一组表建不上不该拖住另一组
+        from dip_pg import knowledge as knowledge_store
+
+        knowledge_store.init_knowledge_schema()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[portal-api] 数据库不可用，知识候选将不落库：{exc}")
     yield
 
 
@@ -45,6 +52,7 @@ app.include_router(agent.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(lineage.router, prefix="/api")
 app.include_router(audit.router, prefix="/api")
+app.include_router(knowledge.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])
