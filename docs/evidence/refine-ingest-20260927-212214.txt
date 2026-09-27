@@ -1,0 +1,70 @@
+==================================================================
+提炼候选入库（按抽检结论）    2026-09-27 21:22:14
+  报告：/mnt/d/Projects/data-intelligence-platform/docs/evidence/refine/refine-report.json
+  平台：http://127.0.0.1:18100
+  放行依据：人工抽检通过（仓库所有者 2026-09-27 原话：我已经抽检完成，md可以入库。）
+  模式：真入库
+==================================================================
+
+入库前：候选池 1139 条 / 口径库 745 条
+
+=== 逐条处理（提交 → 审核 → 入库；check.ok=false 的走拒绝）===
+[01/51] ads.ads_产销存月报.sale_output_ratio → 候选 #1143 审核通过并入库（口径版本 vNone）
+[02/51] ads.ads_产销存月报.stock_increase → 候选 #1144 审核通过并入库（口径版本 vNone）
+[03/51] ads.ads_烟叶供应商排名.amount_rank → 候选 #1145 审核通过并入库（口径版本 vNone）
+[04/51] ads.ads_烟叶供应商排名.weight_rank → 候选 #1146 审核通过并入库（口径版本 vNone）
+[05/51] ads.ads_税利分析.tax_profit_per_sale_box → 候选 #1147 审核通过并入库（口径版本 vNone）
+[06/51] ads.ads_税利分析.sale_qty → 候选 #1148 审核通过并入库（口径版本 vNone）
+[07/51] ads.ads_经营指标驾驶舱.output_qty → 候选 #1149 审核通过并入库（口径版本 vNone）
+[08/51] ads.ads_经营指标驾驶舱.sale_qty → 候选 #1150 审核通过并入库（口径版本 vNone）
+[09/51] ads.ads_经营指标驾驶舱.sale_amt → 候选 #1151 审核通过并入库（口径版本 vNone）
+[10/51] ads.ads_经营指标驾驶舱.tax_profit → 候选 #1152 审核通过并入库（口径版本 vNone）
+[11/51] ads.ads_经营指标驾驶舱.avg_sale_output_ratio → 候选 #1153 审核通过并入库（口径版本 vNone）
+[12/51] ads.ads_经营指标驾驶舱.max_supplier_amt → 候选 #1154 审核通过并入库（口径版本 vNone）
+[13/51] ads.ads_经营指标驾驶舱.max_device_run_rate → 候选 #1155 审核通过并入库（口径版本 vNone）
+[14/51] ads.ads_设备运行看板.device_cnt → 候选 #1156 审核通过并入库（口径版本 vNone）
+[15/51] ads.ads_设备运行看板.run_minutes → 候选 #1157 审核通过并入库（口径版本 vNone）
+[16/51] ads.ads_设备运行看板.stop_minutes → 候选 #1158 审核通过并入库（口径版本 vNone）
+[17/51] ads.ads_设备运行看板.output_qty → 候选 #1159 审核通过并入库（口径版本 vNone）
+[18/51] ads.ads_设备运行看板.avg_run_rate → 候选 #1160 审核通过并入库（口径版本 vNone）
+[19/51] ads.ads_设备运行看板.low_run_rate_device_cnt → 候选 #1161 审核通过并入库（口径版本 vNone）
+[20/51] cdw.dwd_卷烟产量明细.output_qty_cig → 候选 #1162 审核通过并入库（口径版本 vNone）
+[21/51] cdw.dwd_卷烟产量明细.defect_rate → 候选 #1163 审核通过并入库（口径版本 vNone）
+[22/51] cdw.dwd_卷烟销量明细.unit_price → 候选 #1164 审核通过并入库（口径版本 vNone）
+[23/51] cdw.dwd_成品库存明细.stock_unit_cost → 候选 #1165 审核通过并入库（口径版本 vNone）
+[24/51] cdw.dwd_烟叶采购明细.total_amt → 候选 #1166 审核通过并入库（口径版本 vNone）
+[25/51] cdw.dwd_税利明细.total_tax_profit → 候选 #1167 审核通过并入库（口径版本 vNone）
+[26/51] cdw.dwd_设备运行明细.total_minutes → 候选 #1168 审核通过并入库（口径版本 vNone）
+[27/51] cdw.dwd_设备运行明细.hourly_output → 候选 #1169 审核通过并入库（口径版本 vNone）
+[28/51] cdw.dws_产量汇总.total_output_qty → 候选 #1170 审核通过并入库（口径版本 vNone）
+[29/51] cdw.dws_产量汇总.total_defect_qty → 候选 #1171 审核通过并入库（口径版本 vNone）
+[30/51] cdw.dws_产量汇总.work_order_cnt → 提交失败 HTTP 400（{"success":false,"error":"invalid_candidate","problems":[{"code":"missing_depends_on","field":"depends_on","message":"缺依）
+[31/51] cdw.dws_库存汇总.total_stock_qty → 候选 #1172 审核通过并入库（口径版本 vNone）
+[32/51] cdw.dws_库存汇总.total_stock_amt → 候选 #1173 审核通过并入库（口径版本 vNone）
+[33/51] cdw.dws_库存汇总.batch_cnt → 候选 #1174 审核通过并入库（口径版本 vNone）
+[34/51] cdw.dws_产销存汇总.sale_qty → 候选 #1175 审核通过并入库（口径版本 vNone）
+[35/51] cdw.dws_产销存汇总.sale_amt → 候选 #1176 审核通过并入库（口径版本 vNone）
+[36/51] cdw.dws_产销存汇总.stock_qty → 候选 #1177 审核通过并入库（口径版本 vNone）
+[37/51] cdw.dws_烟叶采购供应商汇总.purchase_cnt → 候选 #1178 审核通过并入库（口径版本 vNone）
+[38/51] cdw.dws_烟叶采购供应商汇总.total_weight → 候选 #1179 审核通过并入库（口径版本 vNone）
+[39/51] cdw.dws_烟叶采购供应商汇总.total_amt → 候选 #1180 审核通过并入库（口径版本 vNone）
+[40/51] cdw.dws_烟叶采购供应商汇总.avg_unit_price → 候选 #1181 审核通过并入库（口径版本 vNone）
+[41/51] cdw.dws_烟叶采购供应商汇总.best_leaf_grade → 候选 #1182 审核通过并入库（口径版本 vNone）
+[42/51] cdw.dws_税利汇总.tax_profit_per_box → 候选 #1183 审核通过并入库（口径版本 vNone）
+[43/51] cdw.dws_税利汇总.total_tax_profit → 候选 #1184 审核通过并入库（口径版本 vNone）
+[44/51] cdw.dws_税利汇总.total_tax_amt → 候选 #1185 审核通过并入库（口径版本 vNone）
+[45/51] cdw.dws_税利汇总.total_profit_amt → 候选 #1186 审核通过并入库（口径版本 vNone）
+[46/51] cdw.dws_税利汇总.total_output_qty → 候选 #1187 审核通过并入库（口径版本 vNone）
+[47/51] cdw.dws_设备效率汇总.total_run_minutes → 候选 #1188 审核通过并入库（口径版本 vNone）
+[48/51] cdw.dws_设备效率汇总.total_stop_minutes → 候选 #1189 审核通过并入库（口径版本 vNone）
+[49/51] cdw.dws_设备效率汇总.total_output_qty → 候选 #1190 审核通过并入库（口径版本 vNone）
+[50/51] cdw.dws_设备效率汇总.avg_hourly_output → 候选 #1191 审核通过并入库（口径版本 vNone）
+[51/51] cdw.dws_设备效率汇总.run_rate → 候选 #1192 审核通过并入库（口径版本 vNone）
+
+本轮小结：ingested=50  rejected=0  skipped=0  failed=1
+❌ 有失败项，见上面逐条
+
+入库后：候选池 1189 条 / 口径库 795 条
+变化  ：候选池 50 / 口径库 50
+
+证据：/mnt/d/Projects/data-intelligence-platform/docs/evidence/refine-ingest-20260927-212214.txt
