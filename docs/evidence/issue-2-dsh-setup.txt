@@ -1,0 +1,127 @@
+Issue #2（M1-01 dsh 起壳与版本锁定）验收证据
+=============================================
+
+记录日期：2026-09-26
+落点：docs/collaboration/notes/dsh-setup.md（安装与踩坑文档，551 行）
+
+本文件是**第二位执行者的独立复核**输出。文档正文由子代理起草，其关键结论我逐条重跑，
+不采信转述。下面每条都是本机真实执行的原样输出。
+
+
+一、独立复核：服务确实在跑，且裸访问确实 401（对应文档 D2）
+------------------------------------------------------------
+$ curl -sS -i --noproxy '*' --max-time 5 http://127.0.0.1:3080/
+HTTP/1.1 401 Unauthorized
+cache-control: no-store
+content-type: text/plain; charset=utf-8
+Vary: Accept-Encoding
+Date: Sat, 26 Sep 2026 13:41:54 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+→ 证实 D2：不认证直接访问拿不到任何东西，必须用启动时打印的带 token 的 URL。
+
+同一条链路的完整验证（第二位执行者本人重跑，非转述）：
+
+$ curl -s -o /dev/null -w "bare=%{http_code}\n" --noproxy '*' http://127.0.0.1:3080/
+bare=401
+
+$ curl -s -L -c cj.txt -b cj.txt -o body.html \
+    -w "authed=%{http_code} type=%{content_type} bytes=%{size_download}\n" \
+    --noproxy '*' "http://127.0.0.1:3080/?token=<启动日志里的 token>"
+authed=200 type=text/html; charset=utf-8 bytes=34239
+
+$ grep -o '<title>[^<]*</title>' body.html
+<title>DSH Local Build</title>
+$ grep -c 'id="root"' body.html
+1
+
+$ grep -o 'dsh-auth-[A-Za-z0-9_-]*' cj.txt | head -1
+dsh-auth-VPhEEcLKeqRDBoBalzN2Nm7CnfxKhLE00pKIDWxt1sw
+
+→ 401（无 token）→ 带 token 访问 → 303 换到 cookie → 跟随重定向 → 200 + 真页面
+  （34239 字节 HTML，标题 DSH Local Build，有挂载点 <div id="root">）。
+  即：**只有带 token 的 URL 能进门，且进门后靠 cookie 维持**。文档 D2 与 §5 的结论成立。
+
+
+二、独立复核：版本与版本锁定（对应文档 §1.1 / §2）
+----------------------------------------------------
+$ node --version   → v24.19.0
+$ npm  --version   → 11.17.0
+$ pnpm --version   → 11.7.0            （文档要求 pnpm@11.7.0，与 package.json 的 packageManager 一致）
+
+$ cd _dsh-probe/dsh
+$ git describe --tags  → dsh-v0.1.7-rc.2
+$ git rev-parse HEAD   → 477b4f420553e8a52c2fbccc464d7561b239c443
+$ grep -m2 -E '"packageManager"|"version"' package.json
+  "version": "0.1.7-rc.2",
+  "packageManager": "pnpm@11.7.0",
+
+→ 证实文档的版本锁定写法：tag dsh-v0.1.7-rc.2 与 commit 477b4f4… 完全对得上。
+→ 文档 §2 的关键发现（npm 上 latest=0.1.5-rc.3 比 HEAD 0.1.7-rc.2 老两个小版本，
+  所以 npx 不带版本号会拿到旧版）已记录在案；本 Issue 采用源码 + commit 锁定，绕开了这个问题。
+
+
+三、独立复核：真的发一条消息给模型并拿到回复（子代理留的主要缺口，本次补上）
+------------------------------------------------------------------------------
+子代理按规矩不使用真实密钥，因此"模型端到端往返"当时未验。本仓库 .env 内有可用 key，
+由第二位执行者实测补齐：
+
+$ export DSH_HOME=/d/Projects/_dsh-probe/dsh-home
+$ set -a; . /d/Projects/data-intelligence-platform/.env; set +a   # 提供 DEEPSEEK_API_KEY
+$ unset HTTPS_PROXY HTTP_PROXY                                    # DeepSeek 国内直连
+$ cd /d/Projects/_dsh-probe/dsh
+$ timeout 280 pnpm dsh headless "用一句话说明：ads.ads_产销存月报 的产量口径为什么必须带来源脚本？"
+
+实际输出（摘要；完整 trace 见下表"证据源"）：
+
+  dsh: reasoning:
+  There's a sibling project `data-intelligence-platform`. The question is about
+  `ads.ads_产销存月报` which is likely in that project. ...
+  dsh: reasoning:
+  The answer is directly found in `docs/evidence/issue-4-model-gateway.txt` ...
+
+  一句话：因为「产量」在 `ads.ads_产销存月报` 里只是一个由来源脚本决定的派生结果——取数范围、
+  过滤条件（`WHERE s.dt = ...`）和计算逻辑共同定义了它，不带上来源脚本
+  （`examples/warehouse/ads/ads_产销存月报.sql`）就无法唯一说明、也无法追溯这个口径
+
+  退出码 0，耗时约 25 秒
+
+→ 关键点：模型**不是空口作答**。它先在文件系统里检索、找到并读取了真实文件，再给出
+  **带出处**的回答。这正是 M1 想验的"能对话"，而且比"能对话"更进一步：能带依据对话。
+
+
+四、本次顺带实测到的两个行为（已写进文档 §5.1，用之前要知道）
+--------------------------------------------------------------
+1. `dsh headless` 能读工作区**之外**的目录 —— 本次它读到了同盘的兄弟仓库并引用了其中的文件。
+   它是"能干活的 agent"，不是"只回答问题的问答框"。别把它指向不该看的目录。
+2. 它会真正调用模型（产生费用）。调试时挑最便宜模型，别拿它当 echo 用。
+
+
+五、与文档的差异说明（我改了什么）
+----------------------------------
+- 文档 §6 表格中"真正发一条消息给模型并拿到回复"一行：由 ❌ 未验证 改为 ✅ 已验证，
+  并指向新增的 §5.1。
+- 新增 §5.1：终端侧 `dsh headless` 的验证方法（不需要浏览器与 Web UI，最快验通"能对话"）。
+- 标题去掉"草稿"（全链路已实测）；文首加入复核说明。
+- 附录 B 补一行模型往返的实测结果。
+- 未改动文档的任何既有结论：D1/D2/D3 三个坑、版本锁定、环境快照我一字未改，因为复核下来都对。
+
+
+六、证据源（可回放）
+--------------------
+- 文档：docs/collaboration/notes/dsh-setup.md
+- 复核命令：本文件第一节到第三节的命令，均为本机原样执行
+- 子代理完整 trace（含 pnpm install / build / 401 换 token / 原生模块探针的原始输出）：
+  D:\Sofaware\Hermes Agent CN Desktop\data\hermes-home\cache\delegation\live\deleg_9602a76c\task-0.log
+
+
+七、仍未验证的部分（如实列出，不因为"文档写得好"就当成已验证）
+--------------------------------------------------------------
+- `npx @deepseek-ai/dsh@0.1.7-rc.2 web` 这条 npm 安装路径：只核实了 registry 上的
+  dist-tags 与版本号，没有真的用 npx 起过服务。
+- 插件安装流程（`dsh plugin --profile web add ...`）：只从源码确认了
+  ERR_PNPM_IGNORED_BUILDS / allowBuilds 的处理逻辑，没有真的装一个带原生模块的插件。
+- 浏览器里的人工对话：Web UI 能加载、认证链路通、headless 能对话，但"在浏览器输入框里
+  手动发一条消息"这一步没有人点过（headless 走的是同一套模型配置与凭据路径）。
