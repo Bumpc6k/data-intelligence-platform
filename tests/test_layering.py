@@ -4,6 +4,7 @@
 
     portal_api  →  dip_agent  →  dip_core / dip_contracts
     portal_api  →  lineage_client            （集成适配器，谁也不依赖它）
+    firewall    →  （不依赖任何单元）         （安全判定不该被业务代码牵动）
     dip_contracts / dip_core / lineage_client  →  **不得**依赖上面任何一层
 
 由测试强制，而不是靠自觉：一旦有人在契约层里 import 内核客户端，这里立刻红。
@@ -25,6 +26,7 @@ PKG_DIRS = {
     "model_gateway": ROOT / "apps/model-gateway/src/model_gateway",
     "lineage_client": ROOT / "integrations/lineage-client/src/lineage_client",
     "portal_api": ROOT / "apps/portal-api/src/portal_api",
+    "firewall": ROOT / "apps/firewall/src/firewall",
 }
 
 ALLOWED: dict[str, set[str]] = {
@@ -40,6 +42,7 @@ ALLOWED: dict[str, set[str]] = {
     "lineage_client": {"dip_contracts"},          # 适配器实现契约层的 KernelToolkit 协议
     "dip_agent": {"dip_contracts", "dip_core"},   # 只依赖协议，不依赖 httpx 适配器
     "portal_api": {"dip_contracts", "dip_core", "dip_agent", "lineage_client"},
+    "firewall": set(),                            # 安全判定只依赖标准库 + fastapi/pydantic/yaml
 }
 
 

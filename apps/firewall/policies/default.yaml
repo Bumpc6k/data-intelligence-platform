@@ -1,0 +1,62 @@
+# 防火墙策略表（M2-01）
+#
+# 改策略不用改代码：改这个文件、重启防火墙服务即可（`bash ops/start-firewall.sh`）。
+# 加载时严格校验：档位写错、规则重名、缺 default_tier —— 一律起不来，不会"静默按默认值跑"。
+#
+# 三档从宽到严：auto < approval < deny
+#   一条动作命中多条规则时**取最严的一档**（fail-closed：拿不准按上一档处理）。
+
+version: 1
+
+# 未命中任何规则时按这一档处理。**必须显式声明**。
+# 选 approval 而不是 auto：没写进策略的动作默认当成"需要人确认一次"，
+# 而不是"没人管所以放过去"。加动作时要显式给它一条规则（见 docs/collaboration/notes/firewall.md）。
+default_tier: approval
+
+rules:
+  # ---- 第一档：deny（直接拒绝，连审批机会都不给）----
+  # 破坏性操作无法通过"审批一次"来变得安全：truncate 掉的生产表，审批也救不回来。
+  - name: destructive-ddl
+    tier: deny
+    actions:
+      - "truncate*"      # 匹配 truncate / truncate table / TRUNCATE TABLE ...
+      - "drop*"          # 匹配 drop / drop table / drop database ...
+    reason: 破坏性操作（truncate/drop）不可审批，直接拒绝
+    # 故意不写 targets：任何目标上的破坏性操作都拒绝，包括看起来无关的临时表
+    # （"只 truncate 了张临时表"这种解释，不该由策略表来开这个口子）。
+
+  # ---- 第二档：auto（只读查询，自动通过）----
+  - name: read-only
+    tier: auto
+    actions:
+      - "select"
+      - "show"
+      - "desc"
+      - "describe"
+      - "explain"
+      - "with"           # WITH ... SELECT 的 CTE 查询
+    reason: 只读查询不改数据，自动通过
+
+  # ---- 第三档：approval（生产写操作，需要人确认一次）----
+  - name: production-write
+    tier: approval
+    actions:
+      - "insert"
+      - "update"
+      - "delete"
+      - "merge"
+      - "create*"        # create table / create view ...
+      - "alter*"
+      - "replace*"
+    targets:
+      - "prod.*"
+      - "ads.*"
+      - "dwd.*"
+      - "dws.*"
+      - "cdw.*"
+    reason: 生产库（prod/ads/dwd/dws/cdw）上的写操作需要审批
+
+# 关于「非生产表的写操作」：这里**故意没有** auto 规则。
+# 它们会落到 default_tier=approval —— 也就是仍然需要人确认一次。
+# 想放开某个沙箱前缀（比如 tmp.*），自己加一条 tier: auto 的规则，
+# 别改 default_tier：default_tier 是兜底，放开它等于把所有没写过的动作一起放开。
