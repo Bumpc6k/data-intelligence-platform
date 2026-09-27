@@ -1,0 +1,141 @@
+Issue #3（M1-03 血缘 skill / MCP 服务）验收证据
+=================================================
+
+验证日期：2026-09-26
+被测分支：feat/m1-03-lineage-mcp-skill
+环境：WSL Ubuntu-22.04（Python 3.10.12，.venv 由 make venv 建）
+内核：真实服务 http://127.0.0.1:18080（knowledge.db 已有数据，kb_metrics = 75）
+上游：Issue #1（M1-02 契约）已合并
+
+
+测试规模
+--------
+本项开工前的基线：107 passed, 5 skipped（#1 合并时的数字）
+本项完成后：
+
+$ .venv/bin/python -m pytest --tb=no -p no:warnings | tail -1
+141 passed, 3 skipped in 6.76s
+
+分文件：
+  tests/test_lineage_skill.py    24 passed
+  tests/test_skill_receipt.py     8 passed
+  tests/test_lineage_skill.py 内的端到端用例为**真起进程**
+
+skip 从 5 条降到 3 条的原因（如实说明）：这一轮内核真的起来了，两条原本因"内核服务未运行"
+而跳过的 live 冒烟**真的跑了并通过**：
+
+$ .venv/bin/python -m pytest -rs | grep SKIPPED
+SKIPPED [1] tests/test_api_live.py:21: portal-api 未运行（http://127.0.0.1:18100）
+SKIPPED [1] tests/test_audit_store.py:128: PostgreSQL 未运行（bash ops/start-pg.sh）
+SKIPPED [1] integrations/lineage-client/tests/test_live_smoke.py:64: 未找到演示 SQL：把 LINEAGE_DEMO_SQL 指向内核仓库的 t_ads_产销存月报.sql
+
+
+验收 ①：旗舰问题 → 结构化结果 + 回执（对真实内核）
+==================================================
+命令：.venv/bin/python /mnt/d/Projects/_e2e_m1_03.py
+（真实 MCP 客户端 → stdio 起我们的服务 → 我们的服务调真实内核）
+
+INFO:httpx:HTTP Request: POST http://127.0.0.1:18080/upstream "HTTP/1.0 200 OK"
+握手成功：server = dip-lineage-skill 1
+tools/list → ['lineage_analyze']
+
+问题： ads.ads_产销存月报 的产量怎么来的？
+kind     = upstream
+subject  = ads.ads_产销存月报
+message  = (无)
+
+回执：
+{
+  "skill": "lineage.analyze@1",
+  "endpoint": "POST /upstream",
+  "ms": 6,
+  "evidence_count": 9,
+  "ok": true,
+  "attempts": 1,
+  "http_status": 200,
+  "error": null,
+  "usable": true
+}
+
+涉及的表（前 5）： ['ads.ads_产销存月报', 'cdw.dws_产销存汇总', 'dim.dim_brand', 'dim.dim_plant', 'cdw.dwd_卷烟销量明细']
+内核原始数据里的关键字段：
+  upstream_count = 9
+  edge_count = 13
+  found = True
+  start_table = ads.ads_产销存月报
+
+✅ 证据条数与内核报的 upstream_count 一致，且 receipt.usable = True
+
+即：回执里的 evidence_count(9) 等于内核自己报的 upstream_count(9)，不是我另算的。
+
+
+验收 ②：可用录制 fixture 做无内核测试
+=====================================
+全部 24 条 skill 测试都注入 FakeKernel（数据来自
+integrations/lineage-client/tests/fixtures/kernel-probe-2026-09-23.json），一个内核都不起。
+其中一条走**真实 MCPServer 对象**（list_tools + call_tool + 真实 JSON 序列化）：
+
+$ .venv/bin/python -m pytest tests/test_lineage_skill.py -q
+24 passed in 4.73s
+
+另有 1 条端到端：真起进程 + 真实 MCP 客户端，把 LINEAGE_BASE 指向必然连不上的端口
+（http://127.0.0.1:1），验证**内核挂掉时工具不崩**、如实返回失败回执：
+
+  receipt.ok = False, evidence_count = 0, error 有值  ← 反例价值在这里
+
+中文标识符对照实验（AGENTS.md §8 的坑，实测形态比"漏检"更糟）
+----------------------------------------------------------------
+$ python -c "…见 tests/test_lineage_skill.py::test_ascii_only_pattern_silently_truncates_chinese_identifiers"
+ASCII 正则 ([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_]*) 在「ads.ads_产销存月报 的产量怎么来的？」上得到的
+不是 None，而是 **'ads.ads_'** —— 一个不存在的**假表名**（悄悄截断、不报错）。
+Unicode 感知的正则得到完整的 'ads.ads_产销存月报'。
+
+
+验收 ③：门禁
+============
+$ bash ops/gate.sh
+== lint（ruff）
+All checks passed!
+   ✅ PASS
+== 测试（pytest）
+   ✅ PASS
+
+GATE: ALL_PASS
+
+
+边界（Issue 要求「只做 1 个 skill；不碰写操作类能力」）
+======================================================
+- 只注册 1 个工具：tools/list → ['lineage_analyze']
+- 只调用只读端点：实现里只出现 upstream / analyze 两个内核方法。
+  FakeKernel **只实现了这两个方法** —— 一旦实现偷偷调别的（尤其写类），测试会 AttributeError。
+- 契约声明里 side_effect: read（决定防火墙最低档位）。
+- 冻结资产未改动：integrations/lineage-client、packages/dip-contracts 均只调用不修改。
+
+
+本项过程中发现并修掉的缺陷（自报）
+==================================
+1. **`receipt.usable` 没有出现在序列化结果里**。
+   最初写成普通 property，`model_dump_json()` 里根本没有它 —— 外壳拿到的 JSON 少一个
+   判断依据（"成功且至少有一条证据"），只能自己猜规则。端到端演示断言
+   payload["receipt"]["usable"] 时直接 KeyError 才暴露。已改为 `@computed_field`，
+   并补了回归测试 tests/test_skill_receipt.py::test_usable_is_present_in_serialized_json。
+
+环境侧发现（不属本 Issue，供排障参考）
+=====================================
+**内核启动脚本走 tmux 时会静默死掉**：ops/start-lineage-api.sh 先 export PYTHONPATH 再
+`tmux new-session`，但 tmux **不继承** PYTHONPATH（它只在默认 update-environment 列表里的变量
+才继承）。实测：
+
+$ tmux show-environment -g PYTHONPATH
+unknown variable: PYTHONPATH
+$ # 客户端 export PYTHONPATH 后新建会话，会话内：
+会话内 PYTHONPATH=（空）
+
+于是内核以 ModuleNotFoundError 退出，脚本却已经报了"会话已启动"，看起来像起了其实没起。
+本环境的绕开方式（不经过 tmux）：
+
+$ PYTHONPATH="$PWD:$PWD/apps/lineage-api:$PWD/packages/lineage-core" \
+    nohup .venv/bin/python -m lineage.serve.api_server --host 127.0.0.1 --port 18080 > /tmp/lineage-api.log 2>&1 &
+
+$ curl -sS --noproxy '*' http://127.0.0.1:18080/health
+{"success": true, "service": "lineage-api", ..., "kb_metrics": 75, "graph_exists": true, ...}
