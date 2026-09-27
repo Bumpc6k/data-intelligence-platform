@@ -24,6 +24,7 @@ PKG_DIRS = {
     "dip_skills": ROOT / "packages/dip-skills/src/dip_skills",
     "dip_lineage_skill": ROOT / "packages/dip-lineage-skill/src/dip_lineage_skill",
     "dip_pg": ROOT / "packages/dip-pg/src/dip_pg",
+    "dip_refine": ROOT / "packages/dip-refine/src/dip_refine",
     "model_gateway": ROOT / "apps/model-gateway/src/model_gateway",
     "lineage_client": ROOT / "integrations/lineage-client/src/lineage_client",
     "portal_api": ROOT / "apps/portal-api/src/portal_api",
@@ -40,6 +41,11 @@ ALLOWED: dict[str, set[str]] = {
         "lineage_client",                         # 仅在进程入口 wiring 真实适配器时用到
     },
     "dip_pg": set(),                              # 数据访问层：只依赖 psycopg
+    "dip_refine": {                               # 提炼流水线：依赖契约与协议，进程入口才 wiring 真实适配器
+        "dip_contracts",                          # ToolResult / 候选契约 / 出口事实校验
+        "dip_core",                               # 配置（单一事实源）
+        "lineage_client",                         # 仅在 __main__ wiring 内核客户端时用到
+    },
     "model_gateway": {"dip_core"},                # 网关只吃配置；不依赖契约层与上层
     "lineage_client": {"dip_contracts"},          # 适配器实现契约层的 KernelToolkit 协议
     "dip_agent": {"dip_contracts", "dip_core"},   # 只依赖协议，不依赖 httpx 适配器
