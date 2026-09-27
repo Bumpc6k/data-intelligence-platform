@@ -4,6 +4,10 @@
 | --- | --- |
 | `adr/` | **架构决策记录**：为什么这么定（本仓库自带，随代码演进） |
 | `design/README.md` | 指向设计阶段产出的规划/说明书（在内核仓库 `docs/platform-vision/`） |
+| `planning/` | 阶段规划（含《v2 项目规划 v1》，§5 是要跑的验收路径） |
+| `collaboration/notes/` | 各工作项的模块说明与踩坑（`knowledge.md`、`refine.md`、`doc-channel.md`、`frontend-views.md`、`dsh-shell.md`、`demo-path.md`） |
+| `evidence/README.md` | **存证约定**：证据怎么命名、放哪、内容要求（含"反例必须留""不落密钥"） |
+| `demo/README.md` | **演示资产**：点击路径（平台前端 / dsh 壳）+ 截图与脚本清单 |
 
 设计阶段文档（位于内核仓库 `sql-lineage-mvp`，只读参考，不在本仓库复制以免两份真相）：
 
