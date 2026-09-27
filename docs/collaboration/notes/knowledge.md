@@ -27,6 +27,8 @@
 | `GET /api/knowledge/metrics/versions` | 某口径的全部版本 | 历史不删（含被取代、被回滚的） |
 | `GET /api/knowledge/metrics/history` | 版本事件流水 | 谁、何时、从哪版到哪版、为什么 |
 | `POST /api/knowledge/metrics/rollback` | 回滚到指定版本 | 必须记名 + 写原因；不存在 → 404，已生效 → 409 |
+| `GET /api/knowledge/conflicts` | 冲突全景 | 生效口径 + 未决候选逐条列出（谁、什么公式、什么来源、什么时候） |
+| `POST /api/knowledge/conflicts/resolve` | **仲裁入口** | 留哪条由人指定（`keep_candidate_id` 或 `keep_version`），必须记名 + 写理由 |
 
 `problems` 里的错误码：`missing_source_script` / `invalid_source_script` / `missing_formula` /
 `invalid_formula` / `missing_depends_on` / `invalid_depends_on` / `missing_subject` / `invalid_subject` /
@@ -77,8 +79,8 @@ knowledge_candidates_reject_reason_chk
 
 ## 4. 表结构要点
 
-`knowledge_candidates`（候选池，20 列）：`kind / subject / chinese_name / formula / depends_on(jsonb) /
-source_script / source_line / note / submitted_by / status / reviewer / worth_keeping /
+`knowledge_candidates`（候选池，22 列）：`kind / subject / chinese_name / formula / depends_on(jsonb) /
+source_script / source_line / intent / conflicts(jsonb) / note / submitted_by / status / reviewer / worth_keeping /
 rejected_reason / ingested_by / ingested_at / problems(jsonb)` + 时间戳。
 
 `knowledge_metrics`（入库落点，16 列）：多一个 `candidate_id`（外键指回候选，**入库的口径永远能追回它的候选与审核人**）、
@@ -151,18 +153,76 @@ $ psql -c "select version, event, related_version, actor, reason from knowledge_
 差别也说清楚：内核侧是**只读基线**（无版本、无回滚），版本与回滚只发生在平台侧 ——
 把平台侧口径喂回内核的离线 `kb build` 要另开 Issue（内核是冻结资产，只按接口调用）。
 
-## 6. 怎么验
+## 6. 冲突仲裁（M3-03 / #14）
+
+依据：《双人分工与 Windows 数据开发约定》§3.3 —— **同字段两条公式冲突时必须择一，不允许并存**。
+
+### 什么算冲突（判定口径，可测）
+
+| 情形 | 算不算 | 错误码 |
+| --- | --- | --- |
+| 公式**归一化后不同**（去掉所有空格再比） | **算** | — |
+| 与**生效口径**公式不同，且没声明 `intent=replace` | **算** | `conflict_with_active_metric` |
+| 与**其他未决候选**（pending/approved）公式不同 | **算**（声明 `replace` 也拦） | `conflict_with_pending_candidate` |
+| 只是空格写法不同（`产量 = A + B` vs `产量=A+B`） | 不算 —— 同一条口径重复提交而已 | — |
+| 与已入库但**已失效**的历史版本公式不同 | 不算 —— 历史版本本来就该被取代 | — |
+
+**为什么"未决候选之间冲突"声明 replace 也不行**：`replace` 的语义是"替换现有生效口径"，
+不是"我可以和别人并存"。两条竞争候选同时待审，就是没择一。
+
+### 提交与审批两道关
+
+```
+提交候选 → 与现存口径冲突？
+              有 → 409 + 冲突项清单（哪一条、什么公式、来源、谁提的、什么时候）
+                      出路一：先仲裁（POST /conflicts/resolve）
+                      出路二：如果是替换现有口径，重提并声明 intent=replace
+              无 → 落库（pending）
+审批 approve → **再查一次**（提交到审批之间，别处可能已经把口径改了）→ 有冲突同样 409
+```
+
+声明 `replace` 时，冲突清单仍会写进候选行的 `conflicts` 列 ——
+**"这次替换是谁认的账"比"替换了"更重要**。
+
+### 仲裁入口（人决定，这里只执行）
+
+```
+GET  /api/knowledge/conflicts?subject=...     冲突全景：生效口径 + 未决候选，逐条列出（不解释成对错）
+POST /api/knowledge/conflicts/resolve
+     {subject, keep_candidate_id 或 keep_version（二选一）, operated_by, reason}
+```
+
+- **留候选**：其余未决候选全部驳回（`rejected` + 理由写"冲突仲裁：…"，记名仲裁人）
+- **留某一版**：该版本重新生效（复用 #13 的状态语义：当前版本 → `rolled_back`，目标版本 → `active`），未决候选全部驳回
+- 执行完之后：该口径**只有一条生效版本**（库层不变量保证），**历史一行不删**
+  （被驳回的候选行还在，被换下的版本行还在，版本事件流水也在）
+
+**不做自动仲裁**（Issue 边界）：这里不给"哪条更对"打分，也不替人选 —— 必须由人指定留哪条 + 写明理由。
+
+### 职责切分（照分层铁律）
+
+| 谁 | 干什么 |
+| --- | --- |
+| `dip_contracts.knowledge` | **判定**：公式归一化、谁和谁冲突、按 `intent` 决定拦不拦（纯函数，好测） |
+| `dip_pg/conflicts.py` | **取数**（未决候选）与**落地仲裁结果**（驳回候选、让指定版本重新生效） |
+| `portal_api` 路由 | 粘合：取数 → 判定 → 落库，并把冲突项整理成可读响应 |
+
+`dip_pg` 不许 import 契约层（分层守卫有测试），所以比较逻辑不能写在数据层 —— 这不是洁癖，
+是这条守卫真的会红。
+
+## 7. 怎么验
 
 ```bash
 bash ops/start-pg.sh && bash ops/start-portal.sh      # 起库与平台
 .venv/bin/python -m pytest -q tests/test_knowledge_candidates.py -rs   # 23 条（其中 8 条要真库）
 .venv/bin/python -m pytest -q tests/test_metric_versions.py -rs        # 12 条（其中 7 条要真库、1 条要内核）
+.venv/bin/python -m pytest -q tests/test_conflicts.py -rs              # 19 条（其中 6 条要真库）
 bash ops/gate.sh                                      # 必须 GATE: ALL_PASS
 bash ops/gate.sh --with-smoke                         # 带上真内核的冒烟（含与 /kb/metric 的联合验证）
 ```
 
 完整过程与原始输出：`docs/evidence/issue-12-candidates.txt`（候选与入库）、
-`docs/evidence/issue-13-versions.txt`（版本与回滚）。
+`docs/evidence/issue-13-versions.txt`（版本与回滚）、`docs/evidence/issue-14-conflicts.txt`（冲突与仲裁）。
 
 手边一条命令走一遍（真 HTTP）：
 
@@ -177,7 +237,7 @@ curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_q
   http://127.0.0.1:18100/api/knowledge/metrics/history
 ```
 
-## 7. 踩过的坑（写下来免得再踩）
+## 8. 踩过的坑（写下来免得再踩）
 
 | 坑 | 现象 | 正确做法 |
 | --- | --- | --- |
@@ -186,11 +246,17 @@ curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_q
 | 口径主体的字符集 | 只允许 字母/数字/下划线/点/中文（对齐内核里的标识符形状） | 测试标记别用 `-`；被拦是**正确行为**，不是 bug |
 | 依赖注入点不清理 | 假 store 会泄漏到后面的真库用例（#9 踩过） | fixture 里 `app.dependency_overrides.pop(...)` |
 | 库层约束与外键的报错顺序 | 用不存在的 `candidate_id` 造数据，可能先撞外键而不是 `CHECK`，测试断言就跑偏 | 造数据先建真候选，再撞要验的那条约束 |
+| **依赖注入点被绕过** | 测试里换掉假 store，代码却直接引用了模块级的 `version_store` → **偷偷打到真库**，用例假绿 | 注入对象**一路传参**到底（`_gather_conflicts(vs, cs, ...)`），别在函数体里直接引用模块 |
+| 新增注入点后没补老用例 | 老用例只替换了 `store`，新增的 `versions_store` / `conflicts_store` 落到真模块上 → **CI 没有数据库，直接红**（本地有库时反而看不出来） | 加注入点的那个 PR 里，把所有"用假 store 的用例"一起补上；本地用 `DIP_PG_DSN=...127.0.0.1:1/dip pytest` 模拟无库环境跑一遍 |
+| 冲突项写进 jsonb 时带上 `datetime` | `TypeError: Object of type datetime is not JSON serializable`（口径行有 `created_at`） | 整理成冲突项时把时间转 ISO 字符串（`_as_text`） |
+| SQL 里 `%s is null` 的占位符 | `IndeterminateDatatype: could not determine data type of parameter $3`（`None` 推断不出类型） | 显式转型：`%s::bigint is null or id <> %s::bigint` |
 
-## 8. 当前不支持的事（别指望它）
+## 9. 当前不支持的事（别指望它）
 
 - **不做审核台 UI**（Issue #12 的边界）—— 现在只有接口，`/app/` 前端没有候选页面。
-- **不做同字段冲突仲裁**（#14）：同 `subject` 提两条不同公式，目前两条都能入库（会各自成为一版）。
+- **不做同字段冲突仲裁的自动化**（#14 的边界）：不给"哪条更对"打分、不按规则自动选一条 ——
+  冲突只被**检测出来并拦住**，留哪条必须由人指定（`POST /conflicts/resolve`）。
+- **不做公式的语义等价判断**：`A + B` 与 `B + A` 会被当成两条不同公式（只做"去空格后字面相同"的归一化）。
 - **不做全量知识库迁移**（Issue #13 的边界）：只有人工/流水线提交的候选会进库，内核的 75 条口径不自动搬过来。
 - **回滚只回"哪一版生效"，不回滚候选**：候选池是按次提交的事实，不因为口径回滚而改变状态。
 - **`term` / `rule` 两类候选显式拒绝**（`unsupported_kind`）—— 不是悄悄当口径处理。
@@ -198,7 +264,7 @@ curl -G --noproxy '*' --data-urlencode "subject=ads.ads_产销存月报.output_q
 - 入库**不写回内核知识库**：先落平台侧口径库（`knowledge_metrics`），
   喂回内核的离线构建要另开 Issue（内核是冻结资产，只按接口调用）。
 
-## 9. 谁负责
+## 10. 谁负责
 
 - 流程与口径质量：**责任人（么慌）** —— `worth_keeping` 与拒绝原因都出自这里。
 - 代码与测试：AI 起草（Hermes Agent），提交人逐行复核后才算完成。

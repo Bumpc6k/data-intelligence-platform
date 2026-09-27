@@ -181,7 +181,8 @@ def pg():
 
 def _draft(subject: str, *, formula: str, source_line: int | None = 1, submitted_by: str,
            source_script: str = "examples/warehouse/ads/ads_产销存月报.sql",
-           depends_on: list[FieldRef] | None = None) -> CandidateDraft:
+           depends_on: list[FieldRef] | None = None,
+           intent: str = "new") -> CandidateDraft:
     return CandidateDraft(
         kind="metric",
         subject=subject,
@@ -190,6 +191,7 @@ def _draft(subject: str, *, formula: str, source_line: int | None = 1, submitted
         depends_on=depends_on or [FieldRef(table="cdw.dwd_卷烟产量码段明细", column="dama_qty")],
         source_script=source_script,
         source_line=source_line,
+        intent=intent,
         note="验收用例",
         submitted_by=submitted_by,
     )
@@ -198,12 +200,18 @@ def _draft(subject: str, *, formula: str, source_line: int | None = 1, submitted
 def _ingest_new_version(client: TestClient, subject: str, *, formula: str, mark: str,
                         source_line: int | None = 1,
                         source_script: str = "examples/warehouse/ads/ads_产销存月报.sql",
-                        depends_on: list[FieldRef] | None = None) -> int:
-    """走完整流程入库一版，返回 metric id。"""
+                        depends_on: list[FieldRef] | None = None,
+                        intent: str = "replace") -> int:
+    """走完整流程入库一版，返回 metric id。
+
+    `intent="replace"` 是这些用例的本意：**同一口径的新版本**（公式变了）。
+    M3-03 / #14 起，与生效口径公式不同必须显式声明"这是替换"，否则会被当冲突拦下 ——
+    这正是冲突仲裁与版本化放行之间的那道门（见 `test_conflicts.py`）。
+    """
     candidate_id = client.post(
         "/api/knowledge/candidates",
         json=_draft(subject, formula=formula, source_line=source_line, submitted_by=f"提交人-{mark}",
-                    source_script=source_script, depends_on=depends_on).model_dump(),
+                    source_script=source_script, depends_on=depends_on, intent=intent).model_dump(),
     ).json()["candidate"]["id"]
     client.post(f"/api/knowledge/candidates/{candidate_id}/review",
                 json={"decision": "approve", "reviewer": "么慌", "reason": "对得上脚本", "worth_keeping": True})

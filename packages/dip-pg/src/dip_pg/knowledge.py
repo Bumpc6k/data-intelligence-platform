@@ -55,6 +55,8 @@ create table if not exists knowledge_candidates (
   depends_on     jsonb not null default '[]'::jsonb,   -- [{"table": "...", "column": "..."}]
   source_script  text,                                -- 来源脚本路径（入库的硬门槛）
   source_line    int,
+  intent         text not null default 'new',          -- new / replace（M3-03 / #14：改口径要有人认账）
+  conflicts      jsonb not null default '[]'::jsonb,   -- 提交时与谁冲突（留痕，含"声明替换"的那次）
   note           text,
   submitted_by   text not null,
   submitted_at   timestamptz not null default now(),
@@ -87,6 +89,13 @@ create table if not exists knowledge_candidates (
 );
 create index if not exists idx_kb_candidates_status on knowledge_candidates(status, submitted_at desc);
 create index if not exists idx_kb_candidates_subject on knowledge_candidates(subject);
+
+-- 补列（已存在的库）：M3-01 建的候选表没有 intent / conflicts
+alter table knowledge_candidates add column if not exists intent    text not null default 'new';
+alter table knowledge_candidates add column if not exists conflicts jsonb not null default '[]'::jsonb;
+alter table knowledge_candidates drop constraint if exists knowledge_candidates_intent_chk;
+alter table knowledge_candidates add  constraint knowledge_candidates_intent_chk
+  check (intent in ('new', 'replace'));
 """
 
 METRIC_SCHEMA = """
@@ -173,8 +182,8 @@ create index if not exists idx_kb_metric_history_subject on knowledge_metric_his
 """
 
 CANDIDATE_COLUMNS = (
-    "id, kind, subject, chinese_name, formula, depends_on, source_script, source_line, note, "
-    "submitted_by, submitted_at, status, reviewer, reviewed_at, review_reason, worth_keeping, "
+    "id, kind, subject, chinese_name, formula, depends_on, source_script, source_line, intent, conflicts, "
+    "note, submitted_by, submitted_at, status, reviewer, reviewed_at, review_reason, worth_keeping, "
     "rejected_reason, ingested_at, ingested_by, problems"
 )
 
@@ -221,20 +230,28 @@ def record_candidate(
     depends_on: list[dict[str, str]] | None = None,
     source_script: str | None = None,
     source_line: int | None = None,
+    intent: str = "new",
+    conflicts: list[dict[str, Any]] | None = None,
     note: str = "",
     problems: list[dict[str, str]] | None = None,
 ) -> Persisted:
     """写入一条候选（`status='pending'`）。校验不通过的行**不该走到这里**（接口先拦），
-    真进来了也不影响：库层的门槛只认 `ingested` 态。"""
+    真进来了也不影响：库层的门槛只认 `ingested` 态。
+
+    ``intent`` / ``conflicts``（M3-03 / #14）：候选自己声明的意图，以及提交那一刻"和谁冲突"的清单 ——
+    声明 `replace` 时冲突清单照样要留痕，因为"这次替换是谁认的账"比"替换了"更重要。
+    """
     return _write(
         """insert into knowledge_candidates
               (kind, subject, chinese_name, formula, depends_on, source_script, source_line,
-               note, submitted_by, problems)
-            values (%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s::jsonb) returning id""",
+               intent, conflicts, note, submitted_by, problems)
+            values (%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb) returning id""",
         (
             kind, subject, chinese_name, formula,
             json.dumps(depends_on or [], ensure_ascii=False),
-            source_script, source_line, note, submitted_by,
+            source_script, source_line, intent,
+            json.dumps(conflicts or [], ensure_ascii=False),
+            note, submitted_by,
             json.dumps(problems or [], ensure_ascii=False),
         ),
     )
