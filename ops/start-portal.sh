@@ -7,10 +7,19 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 SESSION=portal-api
 PORT="${PORTAL_PORT:-18100}"
-EXPORT_PATH="PYTHONPATH=$ROOT/apps/portal-api/src:$ROOT/packages/dip-contracts/src:$ROOT/packages/dip-core/src:$ROOT/packages/dip-agent/src:$ROOT/integrations/lineage-client/src:$ROOT/packages/dip-pg/src:$ROOT/packages/dip-docs/src"
+EXPORT_PATH="PYTHONPATH=$ROOT/apps/portal-api/src:$ROOT/packages/dip-contracts/src:$ROOT/packages/dip-core/src:$ROOT/packages/dip-agent/src:$ROOT/integrations/lineage-client/src:$ROOT/packages/dip-pg/src:$ROOT/packages/dip-docs/src:$ROOT/packages/dip-skills/src"
 
 # 文档通道（M3-04 / #15）：tmux 不继承调用方的环境变量，必须显式传进去；
 # 只有调用方 export 了才带（没配就是通道关闭，接口会明确回"未启用"）。
+# 顺手把仓里的 .env 读进来（数据库连接串、文档通道端点都在这），
+# 免得"重启后库里连不上"这种半配置状态悄悄发生（tmux 服务器环境是上一任 shell 的，靠不住）。
+if [ -f "$ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$ROOT/.env"
+  set +a
+fi
+
 DOCS_ENV=""
 for _v in DOCS_ENABLED WEKNORA_MCP_URL WEKNORA_MCP_TOKEN WEKNORA_KB_IDS WEKNORA_TOP_K DIP_PG_DSN; do
   [ -n "${!_v:-}" ] && DOCS_ENV="$DOCS_ENV $_v=${!_v}"

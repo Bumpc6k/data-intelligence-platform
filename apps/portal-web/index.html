@@ -294,6 +294,13 @@
         </div>
         <div class="card hidden" id="p-ctx"><h4>等待提问…</h4>
         </div>
+
+        <!-- 视图区（M4-01 / #17）：宿主按 skill 声明的 renderer 把渲染分派给注册表里的视图。
+             这里只留一个空容器和一个循环 —— 加视图不用改这一行。 -->
+        <div class="card" id="p-views">
+          <h4>视图 <span class="sp" id="viewsLabel">按声明的 renderer 分派</span></h4>
+          <div id="views"><div class="meta">提问后，这块按视图渲染内核与平台给的数据。</div></div>
+        </div>
         <div class="card">
           <h4>全链路：ods → dwd → dws → ads <span class="sp">高亮＝产量 的依赖链（4 跳）</span></h4>
           <div class="lvg" id="lvg2" style="height:330px"></div>
@@ -709,9 +716,36 @@ function renderPanel(a, question) {
   renderGraph(a.result);
   renderReport(a.result);
   renderContext(a, question);
+  renderViews(a);
   loadAudit();
   const which = v && v.type === 'formula' ? 'metric' : (tableOf(a.result) ? 'graph' : 'ctx');
   if (typeof pick === 'function') pick(which);
+}
+
+/* 视图区（M4-01 / #17）：**宿主只做两件事** —— 遍历 answer.views、把每块交给注册表。
+   视图名到组件的映射在 apps/portal-web/views/ 里，宿主不认识任何具体视图；
+   加一个视图 = 在 views/index.js 里加一行 import，这个函数一个字都不用改。 */
+function renderViews(a) {
+  const box = document.getElementById('views');
+  const blocks = (a && a.views) || [];
+  if (box) {
+    box.innerHTML = '';
+    if (!blocks.length) {
+      box.append(el('div', 'meta', '本次回答没有需要渲染的视图（内核没给可画的数据）。'));
+    } else if (typeof window.renderView !== 'function') {
+      box.append(el('div', 'meta', '视图模块没加载成功：' + blocks.length + ' 块数据拿不到视图（看浏览器控制台）。'));
+    } else {
+      blocks.forEach(b => window.renderView(b, box));
+    }
+  }
+  const label = document.getElementById('viewsLabel');
+  if (label) {
+    const names = blocks.map(b => b.renderer);
+    label.textContent = names.length
+      ? names.join(' · ') + '（共 ' + names.length + ' 块 · 注册表里还有：' +
+        ((window.registeredRenderers ? window.registeredRenderers() : []).join('/') || '—') + '）'
+      : '按声明的 renderer 分派';
+  }
 }
 
 
@@ -952,6 +986,41 @@ document.addEventListener('DOMContentLoaded', () => {
   else ask('ads.ads_产销存月报 的产量怎么来的？');   // 进页面就跑一次真实问答，便于演示与截图
 });
 </script>
+
+<!-- 视图模块（M4-01 / #17）：只把注册表暴露给宿主，宿主不认识任何具体视图。
+     模块脚本是 defer 的，会在 DOMContentLoaded 之前执行，所以进页面那一次问答就能用上。 -->
+<script type="module">
+  import { renderView, registeredRenderers } from './views/index.js';
+  window.renderView = renderView;
+  window.registeredRenderers = registeredRenderers;
+  window.viewRegistryReady = true;
+</script>
+
+<style>
+  /* 视图区样式：只补新组件，不动既有令牌与组件层（Issue 边界：不重做视觉设计） */
+  #views .vh{display:flex;align-items:baseline;gap:8px;margin:2px 0 7px}
+  #views .vt{font-weight:600;font-size:13px}
+  #views .vm{color:var(--dim2);font-size:11.5px}
+  #views .meta{color:var(--dim2);font-size:11.5px;margin-top:5px}
+  #views table{width:100%;border-collapse:collapse;font-size:12.5px}
+  #views th{text-align:left;color:var(--dim2);font-weight:500;padding:3px 6px;border-bottom:1px solid var(--line)}
+  #views td{padding:3px 6px;border-bottom:1px solid var(--line2);vertical-align:top}
+  #views td.num{text-align:right;font-variant-numeric:tabular-nums}
+  #views .vgraph{overflow:auto;max-height:320px;border:1px solid var(--line);border-radius:8px;padding:4px;background:var(--bg3)}
+  #views .vgnode{fill:var(--bg);stroke:var(--edge);stroke-width:1}
+  #views .vgnode.on{stroke:var(--acc);stroke-width:2}
+  #views .vglabel{fill:var(--fg);font-size:11px}
+  #views .vglayer{fill:var(--dim2);font-size:10.5px}
+  #views .vgedge{stroke:var(--edge);stroke-width:1.2}
+  #views .vsql .code{background:var(--codebg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+    font-size:12px;overflow:auto;margin:4px 0;white-space:pre-wrap}
+  #views .vsql .kw{color:var(--acc);font-weight:600}
+  #views .vsql .sep{border:0;border-top:1px dashed var(--line);margin:8px 0}
+  #views .vdiff tr.chg td{background:var(--hlbg)}
+  #views .vdiff td.flag{color:var(--warn)}
+  #views .unregistered{border:1px dashed var(--warn);border-radius:8px;padding:8px;background:var(--warnbg)}
+  #views .raw{font-size:11.5px;max-height:170px;overflow:auto;background:var(--codebg);border-radius:6px;padding:6px}
+</style>
 
 </body>
 </html>

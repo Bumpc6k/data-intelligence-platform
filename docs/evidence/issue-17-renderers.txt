@@ -1,0 +1,124 @@
+
+===== 0. 契约层的视图词汇表（一份，三处对齐） =====
+  dip_contracts.RENDERERS = ('table', 'graph', 'sql', 'diff')
+  dip_skills.Renderer     = ('table', 'graph', 'sql', 'diff')
+  两边一致 = True
+
+  skill 声明里的 renderer（packages/*/skill.yaml）：
+    lineage.analyze    evidence_kind=lineage  renderer=graph
+
+===== 1. 真实接口给的视图块（POST /api/agent/ask，真内核 + 真口径库） =====
+  结论： 产量 = 打码量 + 跳码量 - 重码量。忠实表达式：产量 = SUM(打码量) + SUM(跳码量) - SUM(重码量)。公式不在 ads.ads_产销存月报 本层，而在 cdw.dwd_卷烟产量码段明细（dwd 层
+  status = verified | 证据条数 = 3
+  视图块 = 4 块
+    - renderer=table  | 检索命中：ads.ads_产销存月报 产量
+        来源：POST /kb/search
+        data 键：['query', 'rows', 'total', 'truncated']
+        rows=50 total=90 truncated=True 首行=tables/
+    - renderer=sql    | 口径 SQL：ads.ads_产销存月报 产量
+        来源：POST /kb/search
+        data 键：['statements']
+        首条 SQL：ROUND(s.sale_qty / NULLIF(s.output_qty, 0), 4) AS sale_output_ratio｜来源 examples/warehouse/ads/ads_产销存月报.sql#1
+    - renderer=graph  | 血缘：ads.ads_产销存月报
+        来源：POST /upstream
+        data 键：['direction', 'downstream_count', 'edge_count', 'levels', 'paths', 'start_table', 'tables', 'upstream_count']
+        start=ads.ads_产销存月报 tables=9 paths=6 upstream=9 edges=13
+    - renderer=diff   | 口径版本对照：cdw.dwd_卷烟产量码段明细.chanliang_qty
+        来源：database:knowledge_metrics（平台口径库，非内核）
+        data 键：['changed', 'chinese_name', 'from', 'subject', 'to', 'version_count']
+        subject=cdw.dwd_卷烟产量码段明细.chanliang_qty v38->v39 共 39 版｜变了 0 处
+  步骤条上的视图名： ['table', 'table', 'graph']
+
+===== 2. 浏览器里真的渲染了（四种视图各一次，截图在 docs/evidence/issue-17/） =====
+  页面里注册表报的视图名： ["table","graph","sql","diff"]
+  视图区标题： table · sql · graph · diff（共 4 块 · 注册表里还有：table/graph/sql/diff）
+  按选择器数到的真实节点： {'graph': 1, 'table': 1, 'sql': 22, 'diff': 1} （graph/table/diff 各 1 块，sql 22 条语句块）
+  截图：
+    graph  -> D:/Projects/data-intelligence-platform/docs/evidence/issue-17/view-graph.png（28712 字节）
+    table  -> D:/Projects/data-intelligence-platform/docs/evidence/issue-17/view-table.png（23883 字节）
+    sql    -> D:/Projects/data-intelligence-platform/docs/evidence/issue-17/view-sql.png（22159 字节）
+    diff   -> D:/Projects/data-intelligence-platform/docs/evidence/issue-17/view-diff.png（20734 字节）
+  各视图渲染出来的文字（前 200 字）：
+    [graph] ods | dwd | dws | ads | dim | ods_卷烟销量流水 | dwd_卷烟销量明细 | dwd_卷烟产量明细 | dwd_成品库存明细 | dws_产销存汇总 | dws_产量汇总 | dws_库存汇总 | ads_产销存月报 | dim_brand | dim_plant
+    [table] 类型	名字	中文名	表	层次	口径	相关度 | tables	—	产销存月报	ads.ads_产销存月报	ads	—	40.500 | terms	ads_产销存月报	产销存月报	—	—	—	40.500 | metrics	sale_output_ratio	产销率	ads.ads_产销存月报	ads	产销率 = ROUND(销量 / NULLIF(产量, 0), 4)	27 | metrics	stock_i
+    [sql] sale_output_ratio · examples/warehouse/ads/ads_产销存月报.sql # 语句 1 | ROUND(s.sale_qty / NULLIF(s.output_qty, 0), 4) AS sale_output_ratio | 人话口径：产销率 = ROUND(销量 / NULLIF(产量, 0), 4)
+    [diff] 口径公式	产量 = 打码量 + 跳码量 - 重码量	产量 = 打码量 + 跳码量 - 重码量	＝ | 中文名	产量	产量	＝ | 来源脚本	examples/knowledge_demo/cdw/dwd_卷烟产量码段明细.sql	examples/knowledge_demo/cdw/dwd_卷烟产量码段明细.sql	＝ | 来源行	—	—	＝
+  浏览器采集过程中的重试记录： ['shot diff try 0: Page.captureScreenshot timed out after 60s']
+drwxrwxrwx 1 root root  4096 Sep 27 15:43 .
+drwxrwxrwx 1 root root  4096 Sep 27 15:44 ..
+-rwxrwxrwx 1 root root 20734 Sep 27 15:43 view-diff.png
+-rwxrwxrwx 1 root root 28712 Sep 27 15:41 view-graph.png
+-rwxrwxrwx 1 root root 22159 Sep 27 15:42 view-sql.png
+-rwxrwxrwx 1 root root 23883 Sep 27 15:41 view-table.png
+
+===== 3. 「宿主不认识具体视图」（验收②：新增视图不改宿主） =====
+  --- index.html 里有没有按视图名分支的写法 ---
+  ✓ 没有（宿主只调 renderView(block, mount)）
+  --- 宿主里与视图有关的三行 ---
+727:   加一个视图 = 在 views/index.js 里加一行 import，这个函数一个字都不用改。 */
+735:    } else if (typeof window.renderView !== 'function') {
+738:      blocks.forEach(b => window.renderView(b, box));
+993:  import { renderView, registeredRenderers } from './views/index.js';
+994:  window.renderView = renderView;
+  --- 注册表入口（加视图只改这里）---
+import './table.js';
+import './graph.js';
+import './sql.js';
+import './diff.js';
+export { renderView, registeredRenderers, getView, registerView } from './registry.js';
+
+===== 4. 离线用例（Python 契约 + Node 注册表/视图） =====
+....................                                                     [100%]
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 73.165535
+  --- 用例清单 ---
+tests/test_views.py: 20
+
+ok 1 - 四个视图都注册上了，且名字就是契约层那四个
+ok 2 - 重复注册同一个名字直接报错（谁生效不能靠 import 顺序）
+ok 3 - 注册的视图必须实现 render
+ok 4 - renderView 按名字分派并返回用到的视图名
+ok 5 - 认不出的视图名不白屏：显式报警并把原始数据摊开
+ok 6 - 新增视图只注册就生效——宿主一个字不用改
+ok 7 - 表格视图：rows 画成表，非 rows 结构摊平成键值对
+ok 8 - 层次判定与 portal-api 同一套规则
+ok 9 - paths 上相邻两跳就是一条边，且去重
+ok 10 - 布局是纯函数：列按层次、起点高亮、边有坐标
+ok 11 - 没有数据时布局返回空（视图会显式说"没数据"而不是画空图）
+ok 12 - SQL 高亮：关键词包 span，且先转义（不许把 SQL 当 HTML）
+ok 13 - SQL 视图画出口径表达式与来源
+ok 14 - 版本对照：变的标出来，没变的照列
+ok 15 - 两版一致时不假装有差异
+ok 16 - 差异视图画成四列：字段 / 旧 / 新 / 是否变了
+
+===== 5. 反例：认不出的视图名不白屏 =====
+  未注册视图返回： 未注册
+  兜底节点里带着原始数据： true
+  已注册的视图名： table / graph / sql / diff
+
+===== 6. 门禁（三件套：ruff + pytest + node --test） =====
+== lint（ruff）
+   ✅ PASS
+== 测试（pytest）
+   ✅ PASS
+== 视图注册表（node --test）
+   ✅ PASS
+GATE: ALL_PASS
+
+===== 7. 边界核对 =====
+ M .github/workflows/ci.yml
+ M apps/portal-api/src/portal_api/deps.py
+ M apps/portal-api/src/portal_api/routers/agent.py
+ M apps/portal-web/index.html
+ M ops/gate.sh
+ M ops/start-portal.sh
+ M packages/dip-agent/src/dip_agent/agent/answer.py
+ M packages/dip-agent/src/dip_agent/agent/orchestrator.py
+ M packages/dip-contracts/src/dip_contracts/__init__.py
+ M packages/dip-contracts/src/dip_contracts/models.py
+ M tests/test_layering.py
+  --- 冻结资产（应无输出）---

@@ -66,6 +66,38 @@ class ToolCall(BaseModel):
     ok: bool = True
     endpoint: str | None = None
     error: str | None = None
+    #: 这一步的结果用哪个视图渲染（取自 skill 声明的 `renderer`，M4-01 / Issue #17）。
+    #: `None` = 这一步没有视图（纯过程型调用），前端不该硬猜一个。
+    renderer: str | None = None
+
+
+#: 视图词汇表 —— 与 `dip_skills.Renderer` 是同一套（契约层不 import skills，靠测试钉住两边一致）。
+RENDERERS: tuple[str, ...] = ("table", "graph", "sql", "diff")
+
+
+class ViewBlock(BaseModel):
+    """一块要渲染到前端的视图数据（M4-01 / Issue #17）。
+
+    **前端按 `renderer` 分派到注册表里的视图组件**：宿主不认识具体视图，
+    新增一个视图 = 加一个注册文件，不改宿主（验收②）。
+
+    刻意把 `data` 留成自由 dict：视图各自的长相不同（血缘图要 nodes/edges、SQL 视图要脚本文本、
+    diff 视图要两版对照），契约层只统一"这是哪一类视图 + 数据给谁 + 出处是哪"，
+    不去规定每种视图内部字段 —— 那属于视图自己的事。
+    """
+
+    renderer: str = Field(description="视图名，必须来自 RENDERERS")
+    title: str = ""
+    data: dict[str, Any] = Field(default_factory=dict)
+    #: 出处（哪个工具/端点带来的），让"这块图是哪来的"可追
+    source: str | None = None
+    note: str | None = None
+
+    @model_validator(mode="after")
+    def _renderer_must_be_known(self) -> ViewBlock:
+        if self.renderer not in RENDERERS:
+            raise ValueError(f"未知视图 {self.renderer!r}（只认 {', '.join(RENDERERS)}；见 dip_skills 的 renderer 声明）")
+        return self
 
 
 class ResultValue(BaseModel):
@@ -150,6 +182,8 @@ class Answer(BaseModel):
     #: 文档通道（WeKnora）的背景材料。**只能挂这里**：不进 `result`、更不进 `result.evidence`
     #: （见 `dip_contracts/doc_channel.py` 的「仅背景」铁律与 M3-04 / Issue #15）。
     background: Background | None = None
+    #: 要渲染的视图块（M4-01 / #17）。**前端按每块的 `renderer` 分派**，宿主不认识具体视图。
+    views: list[ViewBlock] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _suggestions_must_be_short(self) -> Answer:

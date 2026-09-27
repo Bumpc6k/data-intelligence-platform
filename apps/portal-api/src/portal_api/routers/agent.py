@@ -12,9 +12,24 @@ from pydantic import BaseModel, Field
 from .. import store as store_mod
 from ..deps import get_agent
 from ..doc_support import with_document_background
+from ..view_support import with_platform_views
 from .doc_channel import get_doc_channel
 
 router = APIRouter(tags=["agent"])
+
+
+def metrics_store() -> Any:
+    """平台口径库的读入口（版本对照视图要用）。测试里 override 成假库。"""
+    from dip_pg import knowledge
+
+    return knowledge
+
+
+def versions_store() -> Any:
+    """口径版本表（M3-02 / #13）。测试里 override。"""
+    from dip_pg import metric_versions
+
+    return metric_versions
 
 
 class AskRequest(BaseModel):
@@ -35,6 +50,8 @@ async def ask(
     agent: Annotated[Agent, Depends(get_agent)],
     st: Annotated[Any, Depends(store)] = None,
     channel: Annotated[Any, Depends(get_doc_channel)] = None,
+    metrics: Annotated[Any, Depends(metrics_store)] = None,
+    versions: Annotated[Any, Depends(versions_store)] = None,
 ) -> Answer:
     # 刷新页面/重启服务后，用库里最后一次的表名回填上下文，追问才不会断
     if st.available() and not agent.context_tables(req.session_id):
@@ -43,6 +60,12 @@ async def ask(
             agent.seed_context(req.session_id, tables=tables)
 
     answer = agent.ask(req.text, session_id=req.session_id, mode=req.mode)
+
+    # 平台侧视图（M4-01 / #17）：口径版本对照来自平台口径库，接在内核视图之后
+    try:
+        answer = with_platform_views(answer, metrics_store=metrics, versions_store=versions)
+    except Exception:  # noqa: BLE001  视图是加分项，取不到不该把回答拖挂
+        pass
 
     # 文档通道（M3-04）：只往 background 与 tool_calls 里加东西，**结论一个字不动**
     if req.with_docs:
