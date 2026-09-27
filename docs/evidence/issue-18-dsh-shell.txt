@@ -1,0 +1,165 @@
+
+===== 0. 版本与环境 =====
+  dsh：dsh-v0.1.7-rc.2（tag dsh-v0.1.7-rc.2 / commit 477b4f4）
+  Node/pnpm（dsh 要求 ^22.19 || >=24）：v22.11.0 / ?
+  DSH_HOME：D:/Projects/_dsh-probe/dsh-home（**必须写原生路径**，见 notes 第 5 节坑 3）
+  我们的 skill：WSL 里 python -m dip_lineage_skill --transport http --port 18360 → MCP 端点 http://127.0.0.1:18360/mcp
+  内核：{"success": true, "service": "lineage-api", "endpoints": ["/…
+  为什么这样连：dsh 在 Windows（Node）、skill 在 WSL（Linux venv），跨窗口起 stdio 子进程太脆；
+              HTTP 传输 + mirrored 网络下共享 loopback，两边都能连上（Windows 侧实测：裸 GET /mcp → 400）。
+  Windows 侧可达性：
+    curl http://127.0.0.1:18360/mcp -> 400（400 是 MCP 对裸 GET 的正常回应）
+
+===== 1. skill 侧：HTTP 传输 + 真 MCP 自检（握手 → tools/list → 真调用） =====
+[3/3] 用真 MCP 客户端自检（握手 → tools/list → 真调用）
+  ✓ 握手成功；tools/list → ['lineage_analyze']
+  ✓ 真调用：endpoint=POST /upstream ms=1 ok=True evidence_count=9
+    主体=ads.ads_产销存月报 涉及表=10 张
+
+✅ skill 侧就绪。接下来在 **Git Bash** 里起壳：
+
+    export PATH="/c/Program Files/nodejs:/c/Users/Administrator/AppData/Roaming/npm:$PATH"
+    export DSH_HOME=D:/Projects/_dsh-probe/dsh-home    # 原生路径！/d/... 会被 node 当成相对当前盘
+    set -a; . /d/Projects/data-intelligence-platform/.env; set +a    # DEEPSEEK_API_KEY
+    unset HTTPS_PROXY HTTP_PROXY
+    cd /d/Projects/_dsh-probe/dsh && pnpm dsh web --no-open
+
+===== 2. dsh 配置（只写 profile 的 patch 层，不动源码、不动 cordis.yml） =====
+  --- headless
+    - insert:
+        - id: mcp-lineage
+          name: "@deepseek-ai/dsh-mcp-client"
+          config:
+            serverName: lineage
+            transport: streamable-http
+            url: http://127.0.0.1:18360/mcp
+            toolCallTimeoutMs: 60000
+            failOnStartupError: false
+            reconnect:
+              enabled: true
+              initialDelayMs: 500
+              maxDelayMs: 30000
+  --- web
+    - insert:
+        - id: mcp-lineage
+          name: "@deepseek-ai/dsh-mcp-client"
+          config:
+            serverName: lineage
+            transport: streamable-http
+            url: http://127.0.0.1:18360/mcp
+            toolCallTimeoutMs: 60000
+            failOnStartupError: false
+            reconnect:
+              enabled: true
+              initialDelayMs: 500
+              maxDelayMs: 30000
+  ---- 上面两个 profile 都要写：dsh 的 profile 按入口分（web / headless），**配置不共享** ----
+
+===== 3. 终端面（dsh headless）真跑 =====
+  同一句业务问题，走真模型（DeepSeek）+ 真调我们的 skill：
+
+$ node --import tsx/esm apps/cli/src/bin.ts "headless" "ads.ads_产销存月报 的产量怎么来的？请用 mcp__lineage__lineage_analyze 工具查血缘，两三句话回答，并写明用了哪个工具、上游有几张表。"
+dsh: reasoning:
+The user asks about lineage of ads.ads_产销存月报 production. I should call the MCP tool. Let me call lineage_analyze with table and question.
+
+The MCP server note says: "回答必带回执：先看回执里的证据条数，没有证据就不给结论。" So I must check the receipt's evidence count.
+
+Let me call the tool. Also maybe first list resources? Not needed. Just call lineage_analyze.
+
+Let me do it — maybe also call with a question about the 产量 field. The tool params: question, table, sql, depth. Let's call with table and question.
+dsh: reasoning:
+Receipt evidence_count = 9, usable true. Answer in 2-3 sentences, name the tool, upstream table count.
+
+Upstream count 9 (excluding itself). Answer in Chinese.
+**结论：产量来自 cdw.dws_产量汇总 → cdw.dwd_卷烟产量明细 这条链。**
+
+`ads.ads_产销存月报` 先取 `cdw.dws_产销存汇总` 的产量指标，该汇总再向下追溯到 `cdw.dws_产量汇总`，最终落到明细表 `cdw.dwd_卷烟产量明细`（另有 `dim.dim_brand`、`dim.dim_plant` 两张维表直接挂在报表上做维度关联）。除报表自身外，上游共 **9 张表**、13 条边，分 3 层；回执显示 `evidence_count=9`、`usable=true`，证据充分，结论可用。
+
+工具：`mcp__lineage__lineage_analyze`（`lineage.analyze@1`，`POST /upstream`，耗时 3 ms）。
+
+===== 4. Web 壳真跑（截图见 docs/evidence/issue-18/） =====
+drwxrwxrwx 1 root root  4096 Sep 27 16:11 ..
+-rwxrwxrwx 1 root root 50777 Sep 27 15:58 dsh-web-answer.png
+-rwxrwxrwx 1 root root 58159 Sep 27 16:06 dsh-web-failure-kernel-down.png
+-rwxrwxrwx 1 root root 32622 Sep 27 16:10 dsh-web-failure-model.png
+-rwxrwxrwx 1 root root 50343 Sep 27 16:08 dsh-web-failure-receipt.png
+
+  --- 第 1 轮：正常问答（成功路径）---
+    产销存月报产量血缘分析
+    标准模式
+    对话
+    轨迹
+    ads.ads_产销存月报 的产量怎么来的？请用 mcp__lineage__lineage_analyze 工具查血缘，两三句话回答，并写明用了哪个工具、上游有几张表。
+    15:57
+    已完成工作
+    用时 2秒
+    
+    用的是 mcp__lineage__lineage_analyze（契约 lineage.analyze@1，POST /upstream，回执 evidence_count=9、ok=true）。血缘显示 ads.ads_产销存月报 的产量来自 cdw.dws_产销存汇总，再向下汇聚到 cdw.dws_产量汇总 → 最底层是 cdw.dwd_卷烟产量明细（同层还有销量、库存两条支线）。除本表外上游共 9 张表：dws_产销存汇总、dws_产量汇总、dws_库存汇总、dwd_卷烟销量明细、dwd_卷烟产量明细、dwd_成品库存明细、ods_卷烟销量流水、dim_brand、dim_plant，共 13 条边。
+    
+    用量 16.1K tok
+    15:57
+    发消息或创建任务, / 调用指令, @ 文件或对话
+    工作区内修改
+    DeepSeek-V41-Flash
+    High
+    1 轮 2 步·311 tok/s
+    16.1K tok·缓存命中 51%
+    1%
+===== 5. 失败路径（三种，都是实际发生的，不是演练脚本） =====
+  A. 内核挂了 + skill 也挂了 → 外壳层传输失败：
+    再查一次 ads.ads_产销存月报 的上游血缘（用 mcp__lineage__lineage_analyze），并如实告诉我这次调用成没成功、失败原因是什么。
+    16:04
+    已完成工作
+    用时 5秒
+    
+    这次没成功——如实说明：
+    
+    工具：mcp__lineage__lineage_analyze（表 ads.ads_产销存月报，depth=3）
+    结果：失败。两次调用（含一次重试）都只返回 Error: fetch failed，均没有拿到回执（无 endpoint、无 evidence_count、无 HTTP 状态码）。
+    失败原因：只能确定是传输层/网络层失败——请求根本没走通、没到达血缘端点，所以服务端没有返回任何响应，不是"表不存在"或"血缘图里查不到"这类业务原因（那种情况上一步会返回 found:false 或带错误信息的回执）。具体是端点宕了、连接被拒还是 DNS/代理问题，从这条报错看不出来，我不编造。
+    
+    因此本次无法给出上游表数量；本会话上一次成功调用（回执 evidence_count=9、ok=true）的结果仍是目前唯一有证据的结论（上游 9 张表、13 条边），但那不能替代本轮的失败结果。需要的话我可以隔一会儿再试一次，或换用 SQL 解析方式（传 sql 参数）绕开取表接口。
+
+  B. 内核挂了但 skill 在 → **我们的失败回执照出来了**（ok=false + 精确原因）：
+    这次调用失败了，但拿到了回执——失败原因来自回执本身，不是我的猜测：
+    
+    回执字段	值
+    ok / usable	false / false
+    error / message	重试 1 次后仍失败：连接失败：[Errno 111] Connection refused
+    evidence_count	0（无任何证据条目）
+    http_status	null（请求没到服务端）
+    attempts / ms	2 / 0
+    tables / lineage	[] / {}
+    
+    也就是说：工具内部自己重试了 1 次（共 2 次尝试），都以 连接被拒（Errno 111 Connection refused） 告终——血缘服务端没有在监听或拒绝了连接，请求从未得到 HTTP 响应，因此这次查不到任何上游表。按"无证据不出结论"的规则，本轮不能给出上游表数量；上一次成功调用的结论（9 张上游表、13 条边，evidence_count=9）仍然只是历史证据，不代表当前服务可用。等端点恢复后可以再试。
+
+  C. 模型不可用（密钥无效）→ 外壳明确报错：
+    你好，请用一句话说明 ads.ads_产销存月报 的产量口径是什么。
+    16:09
+    处理失败
+    处理失败
+    本轮运行失败API 密钥无效
+    AUTH
+    发消息或创建任务, / 调用指令, @ 文件或对话
+
+===== 6. 恢复验证（内核重启后 skill 自检回到 ok=True） =====
+    ✓ 真调用：endpoint=POST /upstream ms=2 ok=True evidence_count=9
+      主体=ads.ads_产销存月报 涉及表=10 张
+
+===== 7. 门禁 =====
+== lint（ruff）
+   ✅ PASS
+== 测试（pytest）
+   ✅ PASS
+== 视图注册表（node --test）
+   ✅ PASS
+GATE: ALL_PASS
+
+===== 8. 边界核对 =====
+  --- 本 PR 改动（只应是新增脚本/模板/文档 + skill 入口的传输参数）---
+ M packages/dip-lineage-skill/src/dip_lineage_skill/__main__.py
+ M tests/test_lineage_skill.py
+?? ops/dsh-connect.sh
+?? ops/dsh/
+  --- 冻结资产（应无输出）---
+  --- dsh 仓库自己的改动（应为空：我们只写它的 DSH_HOME 配置）---

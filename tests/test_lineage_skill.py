@@ -30,6 +30,7 @@ from dip_lineage_skill import (
     load_declaration,
     looks_like_sql,
 )
+from dip_lineage_skill.__main__ import main, parse_options
 from dip_lineage_skill.analyze import SKILL_NAME, SKILL_VERSION, TABLE_PATTERN
 from mcp import ClientSession, StdioServerParameters, stdio_client
 
@@ -356,3 +357,78 @@ async def test_stdio_round_trip_with_a_real_mcp_client():
             assert payload["receipt"]["ok"] is False, "内核连不上就该如实报失败"
             assert payload["receipt"]["evidence_count"] == 0
             assert payload["receipt"]["error"], "失败回执必须带原因，不许静默"
+
+
+# --------------------------------------------------------------- 传输方式（M4-02 / #18）
+# dsh 跑在 Windows、skill 跑在 WSL：跨窗口起 stdio 子进程太脆，所以加了 HTTP 传输。
+# 这一组用例钉住"参数怎么解析"，因为**配置错了会静默按默认值跑**（最难查的那类问题）。
+
+
+def test_默认是_stdio_不许改掉既有行为(monkeypatch):
+    for name in ("DIP_SKILL_TRANSPORT", "DIP_SKILL_HOST", "DIP_SKILL_PORT"):
+        monkeypatch.delenv(name, raising=False)
+    options = parse_options([])
+    assert options["transport"] == "stdio"
+    assert options["host"] == "127.0.0.1"
+    assert options["port"] == 18360
+
+
+def test_命令行开_http_并改端口(monkeypatch):
+    monkeypatch.delenv("DIP_SKILL_TRANSPORT", raising=False)
+    options = parse_options(["--transport", "http", "--port", "18400"])
+    assert options["transport"] == "http"
+    assert options["port"] == 18400
+
+
+def test_等号写法也认():
+    options = parse_options(["--transport=http", "--host=0.0.0.0", "--port=19000"])
+    assert (options["transport"], options["host"], options["port"]) == ("http", "0.0.0.0", 19000)
+
+
+def test_环境变量生效(monkeypatch):
+    monkeypatch.setenv("DIP_SKILL_TRANSPORT", "HTTP")   # 大小写不敏感
+    monkeypatch.setenv("DIP_SKILL_PORT", "18999")
+    options = parse_options([])
+    assert options["transport"] == "http"
+    assert options["port"] == 18999
+
+
+def test_命令行覆盖环境变量(monkeypatch):
+    monkeypatch.setenv("DIP_SKILL_TRANSPORT", "http")
+    monkeypatch.setenv("DIP_SKILL_PORT", "18999")
+    options = parse_options(["--transport", "stdio", "--port", "18001"])
+    assert options["transport"] == "stdio"
+    assert options["port"] == 18001
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--transport"],          # 缺值
+        ["--port"],               # 缺值
+        ["--transport", "tcp"],   # 不支持的传输
+        ["--transporty", "http"],  # 拼错的参数
+        ["--port", "abc"],        # 端口不是数字
+    ],
+)
+def test_参数有问题就报错不静默(argv):
+    with pytest.raises(ValueError):
+        parse_options(argv)
+
+
+def test_help_走用法说明():
+    assert parse_options(["--help"]) == {"help": True}
+    assert main(["-h"]) == 0
+
+
+def test_用法里写了_http_端点(monkeypatch, capsys):
+    monkeypatch.delenv("LINEAGE_BASE", raising=False)
+    assert main(["--help"]) == 0
+    out = capsys.readouterr().out
+    assert "/mcp" in out, "用法里要能一眼看到 HTTP 模式的端点路径"
+
+
+def test_参数报错时退出码是_2(monkeypatch, capsys):
+    assert main(["--transport", "tcp"]) == 2
+    err = capsys.readouterr().err
+    assert "stdio" in err and "http" in err, "报错要写清该填什么"
