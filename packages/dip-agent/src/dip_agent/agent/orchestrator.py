@@ -19,6 +19,7 @@ from .assemble import assemble
 from .entity import Entities, extract, pick_topic
 from .intent import classify
 from .planner import PlanStep, plan
+from .views import view_map
 
 
 @dataclass
@@ -31,9 +32,18 @@ class Context:
 
 
 class Agent:
-    def __init__(self, client: KernelToolkit, *, depth: int = 3) -> None:
+    def __init__(
+        self,
+        client: KernelToolkit,
+        *,
+        depth: int = 3,
+        renderer_by_kind: dict[str, str] | None = None,
+    ) -> None:
         self.client = client
         self.depth = depth
+        #: 视图归属覆盖：`{证据种类: 视图名}`，由调用方从 skill 声明里读出来传进来
+        #: （`dip_skills` 的第 8 类字段 `renderer`）。空 = 用平台默认（见 `views.py`）。
+        self.renderer_by_kind = dict(renderer_by_kind or {})
         self._contexts: dict[str, Context] = {}
         self._version: str | None = None
 
@@ -45,8 +55,7 @@ class Agent:
                 self._version = f"kb:{s.data.get('schema_version')}@{(s.data.get('built_at') or '').split(' ')[0]}"
         return self._version
 
-    @staticmethod
-    def _tool_calls(results: list[tuple[PlanStep, object]]) -> list[ToolCall]:
+    def _tool_calls(self, results: list[tuple[PlanStep, object]], by_result: dict[int, str]) -> list[ToolCall]:
         calls: list[ToolCall] = []
         for step, res in results:
             calls.append(
@@ -57,6 +66,8 @@ class Agent:
                     ok=bool(getattr(res, "ok", False)),
                     endpoint=getattr(res, "endpoint", None),
                     error=getattr(res, "error", None),
+                    # 这一步的结果用哪个视图画的（取不到就是没有视图，不硬猜）
+                    renderer=by_result.get(id(res)),
                 )
             )
         return calls
@@ -106,7 +117,9 @@ class Agent:
 
         steps = plan(intent_res, entities, depth=self.depth)
         results = self._execute(steps)
-        calls = self._tool_calls(results)
+        # 视图块与"每一步的视图名"一起算（M4-01 / #17）：视图给前端渲染，视图名标在步骤条上
+        views, by_result = view_map(results, renderer_by_kind=self.renderer_by_kind)
+        calls = self._tool_calls(results, by_result)
 
         if not any(getattr(r, "ok", False) for _, r in results):
             errs = "；".join(f"{c.name}: {c.error}" for c in calls if c.error) or "没有可用的工具结果"
@@ -124,6 +137,7 @@ class Agent:
                 "换一种说法，或先确认表名 / 字段名。",
                 reason="no_matching_evidence",
                 tool_calls=calls,
+                views=views,
             )
         ans = answering.compose(
             findings,
@@ -131,6 +145,7 @@ class Agent:
             tool_calls=calls,
             mode=mode,
             version=self._kb_version(),
+            views=views,
         )
 
         # 更新上下文（供下一轮追问）

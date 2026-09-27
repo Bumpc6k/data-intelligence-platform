@@ -53,7 +53,9 @@ ALLOWED: dict[str, set[str]] = {
     "dip_docs": {                                 # 文档通道适配器：只依赖契约（DocHit 形状）
         "dip_contracts",                          # 把 WeKnora 的返回收成契约层的 DocHit
     },
-    "portal_api": {"dip_contracts", "dip_core", "dip_agent", "lineage_client", "dip_pg", "dip_docs"},
+    "portal_api": {                               # 接口层：编排 + 读声明（M4-01 起读 skill 的 renderer）
+        "dip_contracts", "dip_core", "dip_agent", "lineage_client", "dip_pg", "dip_docs", "dip_skills",
+    },
     "firewall": {"dip_pg"},                       # 判定要留痕：只借数据访问层，不碰业务代码
 }
 

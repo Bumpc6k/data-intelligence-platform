@@ -24,6 +24,7 @@ from .doc_channel import (
 )
 from .kernel import KernelToolkit, ToolResult
 from .models import (
+    RENDERERS,
     Answer,
     Background,
     DocCitation,
@@ -35,10 +36,12 @@ from .models import (
     Source,
     Status,
     ToolCall,
+    ViewBlock,
 )
 from .status import derive_confidence, derive_status, derive_version, needs_human_check
 
 __all__ = [
+    "RENDERERS",
     "Answer",
     "Background",
     "CHANNEL_DOCUMENTS",
@@ -57,6 +60,7 @@ __all__ = [
     "Status",
     "ToolCall",
     "ToolResult",
+    "ViewBlock",
     "attach_background",
     "background_of",
     "check_citations",

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from dip_contracts import Answer, Result, ResultValue, Source, Status, ToolCall
+from dip_contracts import Answer, Result, ResultValue, Source, Status, ToolCall, ViewBlock
 
 from .assemble import Findings
 
@@ -71,6 +71,7 @@ def compose(
     mode: str = "rule",
     version: str | None = None,
     answer_id: str | None = None,
+    views: list[ViewBlock] | None = None,
 ) -> Answer:
     source: Source | None = None
     if f.glossary and (f.glossary.get("source_files") or []):
@@ -93,15 +94,27 @@ def compose(
         suggestions=_suggestions(f),
         tool_calls=tool_calls,
         mode="rule" if mode == "rule" else "llm",
+        views=list(views or []),
     )
 
 
-def clarifier(text: str, *, reason: str, tool_calls: list[ToolCall] | None = None) -> Answer:
-    """证据不足 / 实体缺失 → **反问**，不出结论（铁律 1 的另一面：不许猜）。"""
+def clarifier(
+    text: str,
+    *,
+    reason: str,
+    tool_calls: list[ToolCall] | None = None,
+    views: list[ViewBlock] | None = None,
+) -> Answer:
+    """证据不足 / 实体缺失 → **反问**，不出结论（铁律 1 的另一面：不许猜）。
+
+    反问也带视图：问"改了这张表会砸谁"时，血缘图本身就是回答的一部分 ——
+    **没有结论 ≠ 没有依据可以看**，把依据摆出来让人自己判断更诚实。
+    """
     return Answer(
         answer_id=f"ans_{uuid.uuid4().hex[:12]}",
         text=text,
         result=Result(value=None, confidence=0.0, status=Status.UNRESOLVED, evidence=[]),
         suggestions=["ads.ads_产销存月报 的产量怎么来的？", "ads.ads_产销存月报 的下游有哪些表？"],
         tool_calls=tool_calls or [],
+        views=list(views or []),
     )
