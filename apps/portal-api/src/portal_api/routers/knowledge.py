@@ -18,6 +18,14 @@ GET  /api/knowledge/metrics/history?subject=...  版本事件流水（谁、何�
 POST /api/knowledge/metrics/rollback            回滚到指定版本（必须记名 + 写原因）
 ```
 
+同一口径不允许两条不同公式并存（M3-03 / #14）：
+
+```
+GET  /api/knowledge/conflicts?subject=...        冲突全景（生效口径 + 未决候选，逐条列出）
+POST /api/knowledge/conflicts/resolve            仲裁：留哪条由人指定（必须记名 + 写理由）
+提交 / 审批时若与现存口径冲突 → 409 + 冲突项清单；要替换现有口径须显式声明 intent=replace
+```
+
 三层防护，各管一段（这是本 Issue 的设计要点，不是重复劳动）：
 
 1. **契约层**（`dip_contracts.knowledge`）—— 把"为什么不行"讲清楚：逐条 `problems`，带错误码。
@@ -34,11 +42,16 @@ from typing import Annotated, Any, Literal
 
 from dip_contracts.knowledge import (
     CandidateDraft,
+    blocking_conflicts,
+    conflict_entry,
+    detect_conflicts,
     draft_from_row,
+    has_conflict,
     problems_as_dicts,
     source_ref,
     validate_draft,
 )
+from dip_pg import conflicts as conflict_store
 from dip_pg import knowledge as knowledge_store
 from dip_pg import metric_versions as version_store
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -63,6 +76,42 @@ def store() -> Any:
     return knowledge_store
 
 
+def conflicts_store() -> Any:
+    """依赖注入点：冲突取数与仲裁（同上，测试可覆盖）。"""
+    return conflict_store
+
+
+def _gather_conflicts(versions: Any, candidates_source: Any, subject: str, formula: str | None,
+                      *, exclude_candidate_id: int | None = None) -> dict:
+    """取"与这条公式冲突"的现存记录：生效口径 + 其他未决候选。
+
+    判定（谁和谁冲突）在契约层的纯函数里，这里只负责取数与喂参数 ——
+    分层铁律不许 `dip_pg` 依赖契约层，所以比较逻辑不能写在数据层。
+
+    **两个取数对象是入参，不是模块级引用**：依赖注入点必须一路传到底，
+    否则测试里替换掉的假 store 会被绕过、直接打到真库（这个坑真踩过）。
+    """
+    active = versions.active_metric(subject)
+    active_rows = [active] if active else []
+    pending_rows = candidates_source.pending_candidates(subject, exclude_candidate_id=exclude_candidate_id)
+    return detect_conflicts(formula, active_rows=active_rows, pending_rows=pending_rows)
+
+
+def _reject_on_conflict(error: str | None, items: list[dict], subject: str) -> Any:
+    """冲突被拦时的统一响应：**列出冲突项**（验收明确要求），并说清两条出路。"""
+    if not error:
+        return None
+    return _json(status_code=409, content={
+        "success": False,
+        "error": error,
+        "message": ("同一口径不能并存两条不同公式（《双人分工》§3.3）——必须择一："
+                    "先把冲突那条处理掉（审核驳回），或者用 POST /api/knowledge/conflicts/resolve 仲裁；"
+                    "若是要替换现有口径，重新提交时声明 intent=replace。"),
+        "subject": subject,
+        "conflicts": items,
+    })
+
+
 # ---------------------------------------------------------------- 请求体
 
 
@@ -83,8 +132,17 @@ class IngestRequest(BaseModel):
 
 
 @router.post("/knowledge/candidates")
-def submit_candidate(draft: CandidateDraft, st: Annotated[Any, Depends(store)] = None) -> Any:
-    """提交一条候选。校验不过 → `400`，并把**每一条**原因列出来（缺来源 / 格式非法…）。"""
+def submit_candidate(
+    draft: CandidateDraft,
+    st: Annotated[Any, Depends(store)] = None,
+    vs: Annotated[Any, Depends(versions_store)] = None,
+    cs: Annotated[Any, Depends(conflicts_store)] = None,
+) -> Any:
+    """提交一条候选。校验不过 → `400`；与现存口径冲突 → `409` **并列出冲突项**（M3-03 / #14）。
+
+    `intent=replace` 表示提交人明说"这是替换现有生效口径"——冲突清单照样记在候选行上，
+    但不再拦。其余情况的冲突一律拦：**同一口径不允许两条不同公式并存**。
+    """
     problems = validate_draft(draft)
     if problems:
         return _json(
@@ -100,6 +158,12 @@ def submit_candidate(draft: CandidateDraft, st: Annotated[Any, Depends(store)] =
             status_code=503, content={"success": False, "error": "数据库不可用（未落库）"}
         )
 
+    conflicts = _gather_conflicts(vs, cs, draft.subject, draft.formula)
+    error, items = blocking_conflicts(draft.intent, conflicts)
+    blocked = _reject_on_conflict(error, items, draft.subject)
+    if blocked is not None:
+        return blocked
+
     persisted = st.record_candidate(
         kind=draft.kind,
         subject=draft.subject,
@@ -108,6 +172,9 @@ def submit_candidate(draft: CandidateDraft, st: Annotated[Any, Depends(store)] =
         depends_on=[d.model_dump() for d in draft.depends_on],
         source_script=draft.source_script,
         source_line=draft.source_line,
+        intent=draft.intent,
+        # 声明替换时把"和谁冲突"留痕（谁认的账比"替换了"更重要）
+        conflicts=[*conflicts["active"], *conflicts["pending"]],
         note=draft.note,
         submitted_by=draft.submitted_by,
     )
@@ -154,6 +221,8 @@ def review_candidate(
     candidate_id: int,
     req: ReviewRequest,
     st: Annotated[Any, Depends(store)] = None,
+    vs: Annotated[Any, Depends(versions_store)] = None,
+    cs: Annotated[Any, Depends(conflicts_store)] = None,
 ) -> Any:
     """责任人审核一次。三条规则都是"必须说清楚"，没有默认值：
 
@@ -180,6 +249,18 @@ def review_candidate(
             })
     if not st.available():
         return _json(status_code=503, content={"success": False, "error": "数据库不可用（未落库）"})
+
+    # 审批是"择一"的现场：提交到审批之间可能有人又提交/入库了别的公式（M3-03 / #14）
+    if req.decision == "approve":
+        row = st.get_candidate(candidate_id)
+        if row is None:
+            return _json(status_code=404, content={"success": False, "error": "candidate_not_found",
+                                                   "message": f"候选 #{candidate_id} 不存在"})
+        conflicts = _gather_conflicts(vs, cs, row["subject"], row.get("formula"), exclude_candidate_id=candidate_id)
+        error, items = blocking_conflicts(row.get("intent"), conflicts)
+        blocked = _reject_on_conflict(error, items, row["subject"])
+        if blocked is not None:
+            return blocked
 
     outcome = st.mark_reviewed(
         candidate_id=candidate_id,
@@ -270,6 +351,97 @@ def list_metrics(
     if not st.available():
         return {"success": False, "error": "数据库不可用（未落库）", "items": []}
     return {"success": True, "items": [_with_source(row) for row in st.list_metrics(subject=subject, limit=limit)]}
+
+
+# ---------------------------------------------------------------- 冲突检测与仲裁（M3-03 / #14）
+
+
+class ResolveRequest(BaseModel):
+    """一次仲裁：**留哪条由人指定**（不给默认值），且必须记名 + 写理由。"""
+
+    subject: str = ""
+    keep_candidate_id: int | None = None
+    keep_version: int | None = None
+    operated_by: str = ""
+    reason: str = ""
+
+
+@router.get("/knowledge/conflicts")
+def list_conflicts(
+    subject: Annotated[str, Query(min_length=1, max_length=200)],
+    st: Annotated[Any, Depends(versions_store)] = None,
+    cs: Annotated[Any, Depends(conflicts_store)] = None,
+) -> dict:
+    """某口径主体上的**冲突全景**：生效口径 + 未决候选，逐条列出来。
+
+    只陈述事实（谁、什么公式、什么来源、什么时候），**不解释成对错** —— 判对错是人的事。
+    """
+    if not st.available():
+        return {"success": False, "error": "数据库不可用（未落库）", "conflict": False,
+                "active": [], "pending": []}
+    active = st.active_metric(subject)
+    active_rows = [active] if active else []
+    pending_rows = cs.pending_candidates(subject)
+    return {
+        "success": True,
+        "subject": subject,
+        # 归一化后不止一条公式 = 有冲突（"同样的公式重复提交"不算冲突）
+        "conflict": has_conflict(*active_rows, *pending_rows),
+        # 与"被拒时的冲突项"用同一个形状（conflict_entry），前端只需要认一种结构
+        "active": [conflict_entry("metric", row) for row in active_rows],
+        "pending": [conflict_entry("candidate", row) for row in pending_rows],
+    }
+
+
+@router.post("/knowledge/conflicts/resolve")
+def resolve_conflicts(
+    req: ResolveRequest,
+    cs: Annotated[Any, Depends(conflicts_store)] = None,
+) -> Any:
+    """**仲裁入口**：人决定留哪一条，这里只执行，**不做自动仲裁**（Issue #14 的边界）。
+
+    - 留候选（`keep_candidate_id`）：其余未决候选全部驳回（写明理由），保留的那条仍需正常审核 + 入库。
+    - 留某一版（`keep_version`）：让该版本重新生效（等于 #13 的回滚），未决候选全部驳回。
+
+    执行完之后：该主体**只有一条生效版本**（库层不变量保证），**历史一行不删** ——
+    被驳回的候选仍留着（`rejected` + 仲裁理由），被换下的版本仍留着（`rolled_back` + 谁换的、为什么）。
+    """
+    if not req.subject.strip():
+        return _json(status_code=400, content={"success": False, "error": "missing_subject",
+                                               "message": "缺口径主体"})
+    if (req.keep_candidate_id is None) == (req.keep_version is None):
+        return _json(status_code=400, content={
+            "success": False, "error": "missing_decision",
+            "message": "必须且只能指定一个落选项：keep_candidate_id（留候选）或 keep_version（留某一版）",
+        })
+    if not req.operated_by.strip():
+        return _json(status_code=400, content={"success": False, "error": "missing_operator",
+                                               "message": "缺仲裁人：是人在做这个决定"})
+    if not req.reason.strip():
+        return _json(status_code=400, content={"success": False, "error": "missing_reason",
+                                               "message": "仲裁必须写明理由（为什么留这条、为什么驳回那条）"})
+    if not cs.available():
+        return _json(status_code=503, content={"success": False, "error": "数据库不可用（未落库）"})
+
+    outcome = cs.resolve(
+        subject=req.subject.strip(),
+        operated_by=req.operated_by,
+        reason=req.reason,
+        keep_candidate_id=req.keep_candidate_id,
+        keep_version=req.keep_version,
+    )
+    if not outcome.ok:
+        code = 400
+        if outcome.error in (conflict_store.E_CANDIDATE_NOT_FOUND, conflict_store.E_VERSION_NOT_FOUND):
+            code = 404
+        return _json(status_code=code, content={"success": False, "error": outcome.error,
+                                                "message": outcome.detail})
+    return {
+        "success": True,
+        "kept": outcome.kept,
+        "rejected_candidate_ids": outcome.rejected_candidate_ids,
+        "active_version": outcome.active_version,
+    }
 
 
 # ---------------------------------------------------------------- 口径版本与回滚（M3-02 / #13）

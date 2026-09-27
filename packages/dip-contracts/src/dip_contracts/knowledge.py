@@ -28,6 +28,9 @@ from pydantic import BaseModel, Field
 SUPPORTED_KINDS: tuple[str, ...] = ("metric",)
 KNOWN_KINDS: tuple[str, ...] = ("metric", "term", "rule")
 
+#: 提交意图（M3-03 / #14）：`new` = 新口径；`replace` = 替换现有生效口径（冲突清单留痕）
+KNOWN_INTENTS: tuple[str, ...] = ("new", "replace")
+
 #: 来源脚本必须是仓库里的脚本文件（内核的 `source_file` 就是这种形状：
 #: `examples/warehouse/ads/ads_产销存月报.sql`）。挡掉"来源：我脑子里"这类填法。
 SOURCE_EXTENSIONS: tuple[str, ...] = (".sql", ".py", ".yaml", ".yml")
@@ -35,6 +38,9 @@ SOURCE_EXTENSIONS: tuple[str, ...] = (".sql", ".py", ".yaml", ".yml")
 #: Unicode 感知的标识符：本仓库的表名/字段名含中文（`ads.ads_产销存月报.output_qty`）。
 #: 用 ASCII 正则会**静默**把中文标识符判成非法（AGENTS §8 的坑表第 1 条），所以这里显式带上 CJK 区段。
 IDENT_RE = re.compile(r"^[\w.\u4e00-\u9fff]+$", re.UNICODE)
+
+#: 公式归一化用（见 `normalize_formula`）
+_WS_RE = re.compile(r"\s+")
 
 MAX_SUBJECT = 200
 MAX_FORMULA = 1000
@@ -69,6 +75,9 @@ class CandidateDraft(BaseModel):
     source_script: str | None = None
     #: 脚本内的语句序号 / 行号（内核叫 `source_stmt`，可缺）
     source_line: int | None = None
+    #: 提交意图（M3-03 / #14）：`new` = 新口径（与现有口径冲突就要先仲裁）；
+    #: `replace` = 人明说"这是替换现有生效口径"（冲突清单仍会留痕，但要有人认账）
+    intent: str = "new"
     note: str = ""
     submitted_by: str = ""
 
@@ -126,6 +135,15 @@ def validate_draft(draft: CandidateDraft) -> list[Problem]:
     | `submitted_by` | 必填 | 候选要有人负责 |
     """
     problems: list[Problem] = []
+
+    if draft.intent not in KNOWN_INTENTS:
+        problems.append(
+            Problem(
+                code="invalid_intent",
+                field="intent",
+                message=f"认不出的提交意图：{draft.intent!r}（可选 {'/'.join(KNOWN_INTENTS)}）",
+            )
+        )
 
     if draft.kind not in KNOWN_KINDS:
         problems.append(
@@ -252,6 +270,7 @@ def draft_from_row(row: dict[str, Any]) -> CandidateDraft:
         depends_on=[FieldRef(table=d.get("table", ""), column=d.get("column", "")) for d in deps],
         source_script=row.get("source_script"),
         source_line=row.get("source_line"),
+        intent=row.get("intent") or "new",
         note=row.get("note") or "",
         submitted_by=row.get("submitted_by") or "",
     )
@@ -286,3 +305,90 @@ def source_ref(source_script: str | None, source_line: int | None) -> SourceRef:
         return SourceRef(script=script, line=source_line, precision="line",
                          label=f"{script} 第 {source_line} 条语句")
     return SourceRef(script=script, precision="file", label=f"{script}（文件级：行号待补）")
+
+
+# ---------------------------------------------------------------- 公式冲突（M3-03 / #14）
+
+#: 冲突错误码
+CONFLICT_WITH_ACTIVE = "conflict_with_active_metric"
+CONFLICT_WITH_PENDING = "conflict_with_pending_candidate"
+
+
+def normalize_formula(formula: str | None) -> str:
+    """公式归一化：去掉所有空白再比。
+
+    `产量 = A + B` 与 `产量=A+B` 是同一条公式，不该被判成"冲突"——
+    否则同一份口径换个空格写法就要走一遍仲裁，纯属折腾人。
+    **不做**更多等价判断（不解析表达式、不判 `A+B` 与 `B+A` 是否相同）：
+    那属于"自动仲裁"，Issue #14 明文不做。
+    """
+    return _WS_RE.sub("", (formula or "").strip())
+
+
+def _as_text(value: Any) -> Any:
+    """把 psycopg 返回的 `datetime` 等类型转成 JSON 可写的形式。
+
+    冲突项会被**存进候选行的 `conflicts` jsonb 列**（留痕），所以这里必须保证可直接 `json.dumps`。
+    """
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
+def conflict_entry(kind: str, row: dict[str, Any]) -> dict[str, Any]:
+    """把库里的一行整理成"冲突项"（展示与留痕都用这个形状）。"""
+    entry: dict[str, Any] = {
+        "kind": kind,                       # metric（生效口径）| candidate（未决候选）
+        "id": row.get("id"),
+        "subject": row.get("subject"),
+        "formula": row.get("formula"),
+        "source_script": row.get("source_script"),
+        "source_line": row.get("source_line"),
+        "status": row.get("status"),
+    }
+    if kind == "metric":
+        entry["version"] = row.get("version")
+        entry["who"] = row.get("approved_by")
+        entry["at"] = _as_text(row.get("created_at"))
+    else:
+        entry["who"] = row.get("submitted_by")
+        entry["at"] = _as_text(row.get("submitted_at"))
+        entry["intent"] = row.get("intent")
+    return entry
+
+
+def detect_conflicts(
+    formula: str | None,
+    *,
+    active_rows: list[dict[str, Any]],
+    pending_rows: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """列出与这条公式冲突的现存记录：`{"active": [...], "pending": [...]}`。
+
+    只有**公式归一化后不同**才算冲突 —— 同一条公式重复提交不是冲突（去重留给审核人判断价值）。
+    """
+    mine = normalize_formula(formula)
+    if not mine:
+        return {"active": [], "pending": []}
+    active = [conflict_entry("metric", r) for r in active_rows if normalize_formula(r.get("formula")) != mine]
+    pending = [conflict_entry("candidate", r) for r in pending_rows if normalize_formula(r.get("formula")) != mine]
+    return {"active": active, "pending": pending}
+
+
+def blocking_conflicts(intent: str | None, conflicts: dict[str, list[dict[str, Any]]]) -> tuple[str | None, list[dict[str, Any]]]:
+    """按候选声明的 `intent` 判断"该不该拦"，返回 (错误码, 冲突项)。
+
+    - 与**未决候选**冲突：一律拦 —— 两条竞争候选同时待审，就是"没择一"。
+    - 与**生效口径**冲突：只有 `intent='replace'`（人明说"这是替换"）才放行。
+    """
+    if conflicts["pending"]:
+        return CONFLICT_WITH_PENDING, conflicts["pending"]
+    if conflicts["active"] and (intent or "new") != "replace":
+        return CONFLICT_WITH_ACTIVE, conflicts["active"]
+    return None, []
+
+
+def has_conflict(*rows: dict[str, Any]) -> bool:
+    """一组记录里是否存在"归一化后不止一种公式"（给冲突全景用）。"""
+    formulas = {normalize_formula(r.get("formula")) for r in rows if normalize_formula(r.get("formula"))}
+    return len(formulas) > 1

@@ -13,7 +13,7 @@
 仍由 `portal_api.store` 负责，这里一个字都不动。
 """
 
-from . import knowledge, metric_versions  # noqa: F401  —— 知识（M3-01 / #12）与版本回滚（M3-02 / #13）
+from . import conflicts, knowledge, metric_versions  # noqa: F401  —— 知识（#12）/ 版本回滚（#13）/ 冲突（#14）
 from .knowledge import init_knowledge_schema  # noqa: F401
 from .store import (  # noqa: F401
     JUDGMENT_SCHEMA,
