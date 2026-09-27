@@ -1,0 +1,434 @@
+=========== Issue #12（M3-01）候选池与审核流 · 验收证据 ===========
+验证日期：2026-09-27 11:55:21 CST　被测分支：feat/m3-01-candidate-pool　HEAD：aa8d9cd
+环境：WSL Ubuntu-22.04（Python 3.10.12）+ PostgreSQL 16 :15432 + portal-api :18100
+本轮标记：kb115521（每次跑都不同，避免历史数据造成假绿/假红）
+
+=========== 0. 环境就绪（幂等）===========
+    dip-pg 已在运行
+  portal-api : http://127.0.0.1:18100/api/health
+  前端 + 后端: http://127.0.0.1:18100/app/    ← 打开这个提问就有反馈
+  {"platform":"ok","kernel":{"ok":true,"base_url":"http://127.0.0.1:18080","ms":2,"error":null},"mode":"rule","auth_mode":"dev"}
+  portal-api 健康：{"platform":"ok","kernel":{"ok":true,"base_url":"http://127.0.0.1:18080","ms":1,"error":null},"mode":"rule","auth_mode":"dev"}
+
+=========== 1. 新表就位（只新增两张，既有表一个字没动）===========
+                 List of relations
+   Schema |         Name         | Type  | Owner 
+  --------+----------------------+-------+-------
+   public | audit_log            | table | dip
+   public | firewall_judgments   | table | dip
+   public | knowledge_candidates | table | dip
+   public | knowledge_metrics    | table | dip
+   public | messages             | table | dip
+   public | sessions             | table | dip
+  (6 rows)
+  
+  --- knowledge_candidates 结构（含库层 CHECK）---
+   formula         | text                     |           |          | 
+   depends_on      | jsonb                    |           | not null | '[]'::jsonb
+   source_script   | text                     |           |          | 
+   source_line     | integer                  |           |          | 
+   status          | text                     |           | not null | 'pending'::text
+   worth_keeping   | boolean                  |           |          | 
+   rejected_reason | text                     |           |          | 
+   ingested_at     | timestamp with time zone |           |          | 
+   ingested_by     | text                     |           |          | 
+      "idx_kb_candidates_status" btree (status, submitted_at DESC)
+  Check constraints:
+      "knowledge_candidates_ingest_requires_source_chk" CHECK (status <> 'ingested'::text OR COALESCE(btrim(source_script), ''::text) <> ''::text AND COALESCE(btrim(formula), ''::text) <> ''::text AND depends_on <> '[]'::jsonb)
+      "knowledge_candidates_reject_reason_chk" CHECK (status <> 'rejected'::text OR COALESCE(btrim(rejected_reason), ''::text) <> ''::text)
+      "knowledge_candidates_status_chk" CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'ingested'::text]))
+  --- knowledge_metrics 结构 ---
+   candidate_id  | bigint                   |           | not null | 
+   source_script | text                     |           | not null | 
+   version       | integer                  |           | not null | 1
+      "idx_kb_metrics_candidate" btree (candidate_id)
+      "idx_kb_metrics_subject" btree (subject, version DESC)
+  Check constraints:
+      "knowledge_metrics_source_required_chk" CHECK (COALESCE(btrim(source_script), ''::text) <> ''::text AND COALESCE(btrim(formula), ''::text) <> ''::text AND depends_on <> '[]'::jsonb)
+      "knowledge_metrics_version_chk" CHECK (version >= 1)
+      "knowledge_metrics_candidate_id_fkey" FOREIGN KEY (candidate_id) REFERENCES knowledge_candidates(id)
+
+=========== 2. 反例①：**没有来源脚本的候选，提交这一关就被拒** ===========
+--- 请求体（缺 source_script，且依赖字段为空）---
+  {
+    "kind": "metric",
+    "subject": "ads.ads_产销存月报.kb115521nosrc",
+    "chinese_name": "产量",
+    "formula": "产量 = 打码量 + 跳码量 - 重码量",
+    "depends_on": [],
+    "submitted_by": "么慌"
+  }
+--- 响应（HTTP 400）---
+  {
+    "success": false,
+    "error": "invalid_candidate",
+    "problems": [
+      {
+        "code": "missing_depends_on",
+        "field": "depends_on",
+        "message": "缺依赖字段（至少 1 条）"
+      },
+      {
+        "code": "missing_source_script",
+        "field": "source_script",
+        "message": "缺来源脚本：没有来源脚本的口径不许入库（质量门禁）"
+      }
+    ]
+  }
+
+--- 反例①b：来源脚本格式非法（写了句说明文字，不是路径）---
+  {
+    "success": false,
+    "error": "invalid_candidate",
+    "problems": [
+      {
+        "code": "invalid_source_script",
+        "field": "source_script",
+        "message": "来源脚本必须是脚本文件（.sql/.py/.yaml/.yml）：'我脑子里（口述的）'"
+      }
+    ]
+  }
+
+=========== 3. 正例：一条合规候选走完 提交 → 审核 → 入库 ===========
+--- 3.1 提交 ---
+  {
+    "success": true,
+    "candidate": {
+      "id": 105,
+      "kind": "metric",
+      "subject": "ads.ads_产销存月报.kb115521",
+      "chinese_name": "产量",
+      "formula": "产量 = 打码量 + 跳码量 - 重码量",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "dama_qty"
+        },
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "tiaoma_qty"
+        },
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "chongma_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "source_line": 1,
+      "note": "验收：口径来自脚本第 1 条语句",
+      "submitted_by": "么慌",
+      "submitted_at": "2026-09-27T03:55:25.068668+00:00",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_at": null,
+      "review_reason": null,
+      "worth_keeping": null,
+      "rejected_reason": null,
+      "ingested_at": null,
+      "ingested_by": null,
+      "problems": []
+    }
+  }
+  → 候选 id = 105
+--- 3.2 审核：先试拒绝但不写原因（应当被拒）---
+  {
+    "success": false,
+    "error": "missing_reason",
+    "message": "拒绝必须说明原因（缺来源 / 格式非法 / 价值不够）"
+  }
+--- 3.3 审核：approve 但不回答值不值得留下（应当被拒）---
+  {
+    "success": false,
+    "error": "missing_worth_keeping",
+    "message": "请显式回答「值得留下」——这一栏由责任人确认，不给默认值"
+  }
+--- 3.4 审核：worth_keeping=false 配 approve（自相矛盾，应当被拒）---
+  {
+    "success": false,
+    "error": "contradictory_decision",
+    "message": "worth_keeping=false 与 approve 矛盾：值不得留下就应当 reject 并写明原因"
+  }
+--- 3.5 审核：正式通过 ---
+  {
+    "success": true,
+    "candidate": {
+      "id": 105,
+      "kind": "metric",
+      "subject": "ads.ads_产销存月报.kb115521",
+      "chinese_name": "产量",
+      "formula": "产量 = 打码量 + 跳码量 - 重码量",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "dama_qty"
+        },
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "tiaoma_qty"
+        },
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "chongma_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "source_line": 1,
+      "note": "验收：口径来自脚本第 1 条语句",
+      "submitted_by": "么慌",
+      "submitted_at": "2026-09-27T03:55:25.068668Z",
+      "status": "approved",
+      "reviewer": "么慌",
+      "reviewed_at": "2026-09-27T03:55:25.220815Z",
+      "review_reason": "对着脚本核过公式与字段",
+      "worth_keeping": true,
+      "rejected_reason": null,
+      "ingested_at": null,
+      "ingested_by": null,
+      "problems": []
+    }
+  }
+--- 3.6 入库 ---
+  {
+    "success": true,
+    "metric_id": 49,
+    "candidate": {
+      "id": 105,
+      "kind": "metric",
+      "subject": "ads.ads_产销存月报.kb115521",
+      "chinese_name": "产量",
+      "formula": "产量 = 打码量 + 跳码量 - 重码量",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "dama_qty"
+        },
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "tiaoma_qty"
+        },
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "chongma_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "source_line": 1,
+      "note": "验收：口径来自脚本第 1 条语句",
+      "submitted_by": "么慌",
+      "submitted_at": "2026-09-27T03:55:25.068668Z",
+      "status": "ingested",
+      "reviewer": "么慌",
+      "reviewed_at": "2026-09-27T03:55:25.220815Z",
+      "review_reason": "对着脚本核过公式与字段",
+      "worth_keeping": true,
+      "rejected_reason": null,
+      "ingested_at": "2026-09-27T03:55:25.259034Z",
+      "ingested_by": "么慌",
+      "problems": []
+    }
+  }
+--- 3.7 口径库里查得到（GET /api/knowledge/metrics?subject=...）---
+  {
+    "success": true,
+    "items": [
+      {
+        "id": 49,
+        "candidate_id": 105,
+        "subject": "ads.ads_产销存月报.kb115521",
+        "chinese_name": "产量",
+        "formula": "产量 = 打码量 + 跳码量 - 重码量",
+        "depends_on": [
+          {
+            "table": "cdw.dwd_卷烟产量码段明细",
+            "column": "dama_qty"
+          },
+          {
+            "table": "cdw.dwd_卷烟产量码段明细",
+            "column": "tiaoma_qty"
+          },
+          {
+            "table": "cdw.dwd_卷烟产量码段明细",
+            "column": "chongma_qty"
+          }
+        ],
+        "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+        "source_line": 1,
+        "version": 1,
+        "status": "active",
+        "approved_by": "么慌",
+        "note": "验收：口径来自脚本第 1 条语句",
+        "created_at": "2026-09-27T03:55:25.259034Z"
+      }
+    ]
+  }
+
+=========== 4. 反例②：绕过接口造一条没有来源的候选，再走入库接口 ===========
+（先直接写库：库里允许 pending 无来源，门槛在 ingested 那一步）
+   id  
+  -----
+   106
+  (1 row)
+  
+  INSERT 0 1
+  → 候选 id = 106
+--- 4.1 责任人只看价值，先批了它 ---
+  {
+    "success": true,
+    "candidate": {
+      "id": 106,
+      "kind": "metric",
+      "subject": "ads.ads_产销存月报.kb115521nosrc",
+      "chinese_name": null,
+      "formula": "产量 = A + B",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "dama_qty"
+        }
+      ],
+      "source_script": null,
+      "source_line": null,
+      "note": null,
+      "submitted_by": "偷偷写库的人",
+      "submitted_at": "2026-09-27T03:55:25.420597Z",
+      "status": "approved",
+      "reviewer": "么慌",
+      "reviewed_at": "2026-09-27T03:55:25.520664Z",
+      "review_reason": "先批准，来源入库时再验",
+      "worth_keeping": true,
+      "rejected_reason": null,
+      "ingested_at": null,
+      "ingested_by": null,
+      "problems": []
+    }
+  }
+--- 4.2 入库：**被拒，并逐条说明缺来源** ---
+  {
+    "success": false,
+    "error": "ingest_rejected",
+    "message": "候选没通过入库前的校验，未写入口径库",
+    "problems": [
+      {
+        "code": "missing_source_script",
+        "field": "source_script",
+        "message": "缺来源脚本：没有来源脚本的口径不许入库（质量门禁）"
+      }
+    ]
+  }
+--- 4.3 口径库里查不到它 ---
+  {
+    "success": true,
+    "items": []
+  }
+
+=========== 5. 反例③：彻底绕过接口，直接改库也要被拦（库层 CHECK）===========
+  ERROR:  new row for relation "knowledge_candidates" violates check constraint "knowledge_candidates_ingest_requires_source_chk"
+  DETAIL:  Failing row contains (106, metric, ads.ads_产销存月报.kb115521nosrc, null, 产量 = A + B, [{"table": "cdw.dwd_卷烟产量码段明细", "column": "dama_q..., null, null, null, 偷偷写库的人, 2026-09-27 03:55:25.420597+00, ingested, 么慌, 2026-09-27 03:55:25.520664+00, 先批准，来源入库时再验, t, null, null, null, []).
+  → 上面应当是 constraint "knowledge_candidates_ingest_requires_source_chk" 报错；候选状态没被改：
+  106|approved
+
+--- 口径库自己也不接受无来源的写入 ---
+  ERROR:  new row for relation "knowledge_metrics" violates check constraint "knowledge_metrics_source_required_chk"
+  DETAIL:  Failing row contains (50, 105, x.y, null, 产量 = A + B, [{"table": "t", "column": "c"}],   , null, 1, active, 谁, null, 2026-09-27 03:55:25.879352+00).
+
+=========== 6. 反例④：拒绝必须写明原因（接口 + 库层各一道）===========
+--- 6.1 拒绝并写明原因（通过）---
+  {
+    "success": true,
+    "candidate": {
+      "id": 107,
+      "kind": "metric",
+      "subject": "ads.ads_产销存月报.kb115521rej",
+      "chinese_name": null,
+      "formula": "产量 = A + B",
+      "depends_on": [
+        {
+          "table": "cdw.dwd_卷烟产量码段明细",
+          "column": "dama_qty"
+        }
+      ],
+      "source_script": "examples/warehouse/ads/ads_产销存月报.sql",
+      "source_line": null,
+      "note": "",
+      "submitted_by": "么慌",
+      "submitted_at": "2026-09-27T03:55:25.896564Z",
+      "status": "rejected",
+      "reviewer": "么慌",
+      "reviewed_at": "2026-09-27T03:55:25.943672Z",
+      "review_reason": "公式与脚本对不上（脚本是 SUM(chanliang_qty)）",
+      "worth_keeping": null,
+      "rejected_reason": "公式与脚本对不上（脚本是 SUM(chanliang_qty)）",
+      "ingested_at": null,
+      "ingested_by": null,
+      "problems": []
+    }
+  }
+--- 6.2 被拒的候选不许入库 ---
+  {
+    "success": false,
+    "error": "not_approved",
+    "message": "候选当前状态 rejected：只有 approved 才谈入库（未审批或被拒的候选不进库）"
+  }
+--- 6.3 已审核过的候选不能被第二次审核覆盖 ---
+  {
+    "success": false,
+    "error": "status_conflict",
+    "message": "候选 #107 不是 pending：可能已被审过；状态没被改动"
+  }
+
+=========== 7. 候选池台账（本轮标记 kb115521 的行）===========
+   id  |  status  |             subject              |                  source                   | reviewer | worth_keeping |   提交   | 入库人 
+  -----+----------+----------------------------------+-------------------------------------------+----------+---------------+----------+--------
+   105 | ingested | ads.ads_产销存月报.kb115521      | examples/warehouse/ads/ads_产销存月报.sql | 么慌     | t             | 03:55:25 | 么慌
+   106 | approved | ads.ads_产销存月报.kb115521nosrc | (无)                                      | 么慌     | t             | 03:55:25 | -
+   107 | rejected | ads.ads_产销存月报.kb115521rej   | examples/warehouse/ads/ads_产销存月报.sql | 么慌     |               | 03:55:25 | -
+  (3 rows)
+  
+
+=========== 8. 门禁 ===========
+  --- 全量 ---
+  == 测试（pytest）
+  ........................................................................ [ 25%]
+  ........................................................................ [ 50%]
+  ........................................................................ [ 75%]
+  .....................................................................s.  [100%]
+     ✅ PASS
+  
+  GATE: ALL_PASS
+  --- 全量测试计数 ---
+  286 passed, 1 skipped in 7.78s
+  --- 本 Issue 新用例：总数 / 需要真库 / 不需要真库 ---
+  23 passed in 2.10s
+  8 passed, 15 deselected in 2.12s
+  15 passed, 8 deselected in 1.56s
+
+=========== 9. 边界核对：既有表与既有文件没被动 ===========
+  --- 本次工作区改动清单 ---
+   M apps/portal-api/src/portal_api/main.py
+   M packages/dip-pg/src/dip_pg/__init__.py
+  ?? apps/portal-api/src/portal_api/routers/knowledge.py
+  ?? docs/collaboration/notes/knowledge.md
+  ?? docs/evidence/issue-12-candidates.txt
+  ?? packages/dip-contracts/src/dip_contracts/knowledge.py
+  ?? packages/dip-pg/src/dip_pg/knowledge.py
+  ?? tests/test_knowledge_candidates.py
+  --- 冻结资产（integrations/lineage-client、dip-contracts 既有文件）---
+  （无输出 = 一个字都没动）
+  --- dip_pg/store.py（判定留痕）---
+  （无输出 = 没动）
+  --- 既有表结构（sessions/messages/audit_log）列数 ---
+  audit_log 列数=14
+  firewall_judgments 列数=17
+  knowledge_candidates 列数=20
+  knowledge_metrics 列数=13
+  messages 列数=6
+  sessions 列数=5
+
+=========== 10. 本次踩到的坑（都已绕开，记在这里免得下次再踩）===========
+  1) 中文进 URL query 必须 URL 编码：直接拼 '?subject=ads.ads_产销存月报.x' 会被 uvicorn 顶回
+     'Invalid HTTP request received.' + HTTP 400（不是应用的错，是 HTTP 请求行本身非法）。
+     本脚本统一用 curl -G --data-urlencode。
+  2) JSONResponse 不认 datetime：候选行里有 timestamptz，直接塞 JSONResponse 会在渲染时
+     TypeError: Object of type datetime is not JSON serializable；接口统一过 jsonable_encoder。
+  3) 口径主体的格式校验只允许 字母/数字/下划线/点/中文 —— 测试标记里用了 '-' 会被判 invalid_subject
+     （这正好说明校验是生效的：不是没写测试，是写错了就该被拦）。

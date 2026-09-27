@@ -1,0 +1,261 @@
+"""知识候选的契约与校验（工作项 M3-01 / Issue #12）。
+
+口径回写不许直接改知识库，只能走「候选 → 责任人审核 → 入库」，所以候选**必须带齐**三件东西
+（《双人分工与 Windows 数据开发约定》§3.3）：**来源脚本路径 + 公式 + 依赖字段**。
+本模块就是那三件的契约与校验，纯函数、纯 pydantic，不碰数据库、不碰 HTTP ——
+将来 M3-05 的提炼流水线要产出候选，也走这里，避免"流水线自己定一套格式"。
+
+**为什么校验放在契约层而不是接口层**：候选有两个产生入口（人提交、流水线产出），
+还有第三个更危险的入口（绕过接口直接写库）。前两个靠这里把话说清楚（逐条 `Problem` + 错误码），
+第三个靠 `dip_pg` 里的 `CHECK` 约束兜住 —— 两层，缺一层都不行。
+
+**为什么捕获不了问题也不抛异常**：验收要求"候选被拒时说明原因（缺来源/格式非法）"。
+抛异常只能给一个字符串，拿不到"哪几条不对"；这里返回 `list[Problem]`，每条带
+`code`（给机器）/`field`（给定位）/`message`（给人看）。
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------- 常量
+
+#: 本轮只落地「口径」这一类。term / rule 的通道等各自的 Issue —— 但**显式拒绝**，
+#: 而不是静默当成 metric 处理（认不出的类型必须报错，AGENTS §3 铁律 1）。
+SUPPORTED_KINDS: tuple[str, ...] = ("metric",)
+KNOWN_KINDS: tuple[str, ...] = ("metric", "term", "rule")
+
+#: 来源脚本必须是仓库里的脚本文件（内核的 `source_file` 就是这种形状：
+#: `examples/warehouse/ads/ads_产销存月报.sql`）。挡掉"来源：我脑子里"这类填法。
+SOURCE_EXTENSIONS: tuple[str, ...] = (".sql", ".py", ".yaml", ".yml")
+
+#: Unicode 感知的标识符：本仓库的表名/字段名含中文（`ads.ads_产销存月报.output_qty`）。
+#: 用 ASCII 正则会**静默**把中文标识符判成非法（AGENTS §8 的坑表第 1 条），所以这里显式带上 CJK 区段。
+IDENT_RE = re.compile(r"^[\w.\u4e00-\u9fff]+$", re.UNICODE)
+
+MAX_SUBJECT = 200
+MAX_FORMULA = 1000
+MAX_SCRIPT = 400
+MAX_NAME = 200
+
+# ---------------------------------------------------------------- 数据形状
+
+
+class FieldRef(BaseModel):
+    """一个依赖字段。形状对齐内核 `/kb/metric` 的 `depends_on` 元素（table + column）。"""
+
+    table: str = ""
+    column: str = ""
+
+
+class CandidateDraft(BaseModel):
+    """一份待审的候选（口径）。
+
+    **刻意不做"模型级校验"**：字段全部宽松（`str | None`、空列表），问题由
+    `validate_draft()` 逐条收集。这样一次提交能拿到**所有**毛病，而不是改一条报一条。
+    """
+
+    kind: str = "metric"
+    #: 口径主体：`表.字段/指标`，例如 `ads.ads_产销存月报.output_qty`
+    subject: str = ""
+    chinese_name: str | None = None
+    #: 公式，例如 `产量 = 打码量 + 跳码量 - 重码量`
+    formula: str | None = None
+    depends_on: list[FieldRef] = Field(default_factory=list)
+    #: 来源脚本路径（入库的硬门槛）
+    source_script: str | None = None
+    #: 脚本内的语句序号 / 行号（内核叫 `source_stmt`，可缺）
+    source_line: int | None = None
+    note: str = ""
+    submitted_by: str = ""
+
+
+class Problem(BaseModel):
+    """一条被拒的原因。`code` 给机器（测试与前端判分支），`message` 给人看。"""
+
+    code: str
+    field: str
+    message: str
+
+
+# ---------------------------------------------------------------- 校验
+
+
+def _blank(value: str | None) -> bool:
+    return value is None or not value.strip()
+
+
+def _check_ident(value: str, field: str, *, label: str, max_len: int) -> list[Problem]:
+    if _blank(value):
+        return [Problem(code=f"missing_{field}", field=field, message=f"缺{label}")]
+    if len(value) > max_len:
+        return [
+            Problem(
+                code=f"invalid_{field}",
+                field=field,
+                message=f"{label}过长（{len(value)} > {max_len}）",
+            )
+        ]
+    if not IDENT_RE.match(value):
+        return [
+            Problem(
+                code=f"invalid_{field}",
+                field=field,
+                message=f"{label}格式非法（只允许字母/数字/下划线/点/中文）：{value!r}",
+            )
+        ]
+    return []
+
+
+def validate_draft(draft: CandidateDraft) -> list[Problem]:
+    """逐条给出候选的问题；空列表 = 可以受理。
+
+    规则（每条都可测，不搞模糊判断）：
+
+    | 项 | 规则 | 为什么 |
+    | --- | --- | --- |
+    | `kind` | 必须是 `metric` | term/rule 通道还没有，认不出就必须报错 |
+    | `subject` | 必填、Unicode 标识符、≤200 | 口径要指到「哪个表的哪个字段/指标」 |
+    | `formula` | 必填、≤1000、无换行、无分号 | 一条候选只表达一条公式，分号说明塞了多条 SQL |
+    | `depends_on` | 至少 1 条，每条 table/column 合法 | 口径的价值在于能追到它的输入 |
+    | `source_script` | 必填、无空白、扩展名在白名单内 | **质量门禁：没有来源脚本的口径不许入库** |
+    | `source_line` | 可缺；给了就必须 ≥1 | 行号是从 1 数起的 |
+    | `submitted_by` | 必填 | 候选要有人负责 |
+    """
+    problems: list[Problem] = []
+
+    if draft.kind not in KNOWN_KINDS:
+        problems.append(
+            Problem(code="unknown_kind", field="kind", message=f"认不出的类型：{draft.kind!r}")
+        )
+    elif draft.kind not in SUPPORTED_KINDS:
+        problems.append(
+            Problem(
+                code="unsupported_kind",
+                field="kind",
+                message=f"{draft.kind!r} 通道本轮未实现（已支持：{'/'.join(SUPPORTED_KINDS)}）",
+            )
+        )
+
+    problems += _check_ident(draft.subject, "subject", label="口径主体", max_len=MAX_SUBJECT)
+
+    if _blank(draft.formula):
+        problems.append(Problem(code="missing_formula", field="formula", message="缺公式"))
+    else:
+        formula = draft.formula or ""
+        if len(formula) > MAX_FORMULA:
+            problems.append(
+                Problem(code="invalid_formula", field="formula", message=f"公式过长（> {MAX_FORMULA}）")
+            )
+        elif "\n" in formula or "\r" in formula:
+            problems.append(
+                Problem(code="invalid_formula", field="formula", message="公式里不许有换行（一条候选一条公式）")
+            )
+        elif ";" in formula:
+            problems.append(
+                Problem(
+                    code="invalid_formula",
+                    field="formula",
+                    message="公式里出现分号：一条候选只表达一条公式，多条请拆开提",
+                )
+            )
+
+    real_deps = [d for d in draft.depends_on if not (_blank(d.table) and _blank(d.column))]
+    if not real_deps:
+        problems.append(
+            Problem(code="missing_depends_on", field="depends_on", message="缺依赖字段（至少 1 条）")
+        )
+    else:
+        for i, dep in enumerate(real_deps):
+            for field, label in (("table", "依赖表"), ("column", "依赖字段")):
+                value = getattr(dep, field)
+                if _blank(value):
+                    problems.append(
+                        Problem(
+                            code="invalid_depends_on",
+                            field=f"depends_on[{i}].{field}",
+                            message=f"第 {i + 1} 条依赖缺{label}",
+                        )
+                    )
+                elif not IDENT_RE.match(value):
+                    problems.append(
+                        Problem(
+                            code="invalid_depends_on",
+                            field=f"depends_on[{i}].{field}",
+                            message=f"第 {i + 1} 条依赖的{label}格式非法：{value!r}",
+                        )
+                    )
+
+    script = draft.source_script
+    if _blank(script):
+        problems.append(
+            Problem(
+                code="missing_source_script",
+                field="source_script",
+                message="缺来源脚本：没有来源脚本的口径不许入库（质量门禁）",
+            )
+        )
+    else:
+        script = (script or "").strip()
+        if len(script) > MAX_SCRIPT:
+            problems.append(
+                Problem(code="invalid_source_script", field="source_script", message="来源脚本路径过长")
+            )
+        elif any(ch.isspace() for ch in script):
+            problems.append(
+                Problem(
+                    code="invalid_source_script",
+                    field="source_script",
+                    message="来源脚本路径里有空白字符（不能是路径以外的说明文字）",
+                )
+            )
+        elif not script.lower().endswith(SOURCE_EXTENSIONS):
+            problems.append(
+                Problem(
+                    code="invalid_source_script",
+                    field="source_script",
+                    message=f"来源脚本必须是脚本文件（{'/'.join(SOURCE_EXTENSIONS)}）：{script!r}",
+                )
+            )
+
+    if draft.source_line is not None and draft.source_line < 1:
+        problems.append(
+            Problem(
+                code="invalid_source_line",
+                field="source_line",
+                message=f"来源行号必须 ≥ 1，实际 {draft.source_line}",
+            )
+        )
+
+    if _blank(draft.submitted_by):
+        problems.append(Problem(code="missing_submitter", field="submitted_by", message="缺提交人"))
+
+    return problems
+
+
+def draft_from_row(row: dict[str, Any]) -> CandidateDraft:
+    """把库里的候选行还原成草稿 —— **入库前再校验一次**用的。
+
+    为什么入库要再验一遍：候选从提交到入库中间隔着一次人工审核，中间可能有人直接改过库
+    （本项目明确要防的就是"绕过接口直接写库"）。哪怕库层 `CHECK` 已经拦了一道，
+    这里再给一次"逐条原因"，用户看到的是"为什么进不去"，而不是一句数据库报错。
+    """
+    deps = row.get("depends_on") or []
+    return CandidateDraft(
+        kind=row.get("kind") or "metric",
+        subject=row.get("subject") or "",
+        chinese_name=row.get("chinese_name"),
+        formula=row.get("formula"),
+        depends_on=[FieldRef(table=d.get("table", ""), column=d.get("column", "")) for d in deps],
+        source_script=row.get("source_script"),
+        source_line=row.get("source_line"),
+        note=row.get("note") or "",
+        submitted_by=row.get("submitted_by") or "",
+    )
+
+
+def problems_as_dicts(problems: list[Problem]) -> list[dict[str, str]]:
+    return [p.model_dump() for p in problems]
