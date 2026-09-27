@@ -1,0 +1,133 @@
+Issue #4（M1-04 模型网关·薄层）验收证据
+=========================================
+
+验证日期：2026-09-26
+被测分支：feat/m1-04-model-gateway（基于 main 3dcf530）
+环境：WSL Ubuntu-22.04（Python 3.10.12）
+上游：真实 DeepSeek API（https://api.deepseek.com）
+
+
+测试规模
+--------
+本项基线（main）：107 passed, 5 skipped
+本项完成：
+
+$ .venv/bin/python -m pytest --tb=no -p no:warnings | tail -1
+132 passed, 3 skipped in 6.13s
+
+$ .venv/bin/python -m pytest tests/test_model_gateway.py --tb=no -p no:warnings | tail -1
+23 passed in 2.47s
+
+（skip 从 5 条降到 3 条：内核本轮在跑，两条原本跳过的 live 冒烟真的跑了。）
+全部单测用假上游（httpx.MockTransport），不碰真实网络、不需要真 key，CI 上也能跑。
+
+
+验收 ①：换模型只需改配置（给一段配置 diff 证明）
+=================================================
+**配置 diff —— 只动 .env 一行，代码零改动：**
+
+```diff
+  DEEPSEEK_API_KEY=sk-***
+  LLM_BASE_URL=https://api.deepseek.com
+- LLM_MODEL=deepseek-chat
++ LLM_MODEL=deepseek-reasoner
+```
+
+代码一行没动，发给上游的 `model` 跟着配置变（单测断言真实请求体）：
+
+$ .venv/bin/python -m pytest tests/test_model_gateway.py -q -k switching
+  test_switching_model_is_config_only                    通过
+  test_caller_supplied_model_is_overridden_by_config     通过（模型以配置为准，调用方写了也不算）
+
+**真实调用**（本机 .env 里 LLM_MODEL=deepseek-v4-flash，经网关打到 DeepSeek）：
+
+$ curl -X POST http://127.0.0.1:18200/v1/chat/completions ...
+HTTP 200   用时 3.149228s
+
+model      : deepseek-flash          ← 上游回显的模型名
+answer     : 因为 ads.ads_产销存月报 的产量口径由来源脚本的取数范围、过滤条件和计算逻辑共同决定，
+             不带来源脚本就无法唯一说明和追溯该指标口径。
+usage      : {'prompt_tokens': 60, 'completion_tokens': 421, 'total_tokens': 481,
+              'prompt_tokens_details': {'cached_tokens': 0},
+              'completion_tokens_details': {'reasoning_tokens': 380}, ...}
+
+**记账**（token 数取自上游 usage，不自算）：
+
+$ curl http://127.0.0.1:18200/usage
+{"calls":1,"failures":0,"prompt_tokens":60,"completion_tokens":421,"total_tokens":481,
+ "recent":[{"model":"deepseek-v4-flash","ms":3139,"attempts":1,"ok":true,
+            "prompt_tokens":60,"completion_tokens":421,"total_tokens":481,
+            "http_status":200,"error":null}]}
+
+
+验收 ②：网关不可达时明确报错，不静默失败
+=========================================
+**真实 HTTP 验证**（把 LLM_BASE_URL 指到必然连不上的 127.0.0.1:1，起第二个网关实例）：
+
+$ curl http://127.0.0.1:18201/health
+{"ok":true,"service":"model-gateway","version":"0.1.0","base_url":"http://127.0.0.1:1",
+ "model":"deepseek-v4-flash","key_configured":true,"timeout":30.0,"max_attempts":2,
+ "rate_limit_per_min":0}
+
+$ curl -X POST http://127.0.0.1:18201/v1/chat/completions -d '{"messages":[...]}'
+{"error":{"type":"gateway_error","code":"upstream_error",
+          "message":"网关不可达：http://127.0.0.1:1（ConnectError）"}}
+HTTP 502
+
+$ curl http://127.0.0.1:18201/usage
+{"calls":1,"failures":1,...,"recent":[{"model":"deepseek-v4-flash","ms":130,"attempts":2,
+  "ok":false,...,"http_status":502,
+  "error":"网关不可达：http://127.0.0.1:1（ConnectError）"}]}
+
+要点：① 502 + 机器可读的 `code`；② **attempts=2** 证明连接类错误重试过；
+③ 失败进了记账（failures=1）；④ **没有任何"规则模式"降级**。
+
+
+反例清单（都在单测里，全部通过）
+================================
+| 场景 | 期望 | 用例 |
+| --- | --- | --- |
+| 未配 key | 503 / `no_api_key`，且**不打上游** | test_missing_key_fails_loudly_and_never_calls_upstream |
+| 未配模型 | 503 / `no_model`，且不打上游 | test_missing_model_fails_loudly |
+| `stream=true` | 400 / `stream_unsupported`，**不静默降级成非流式** | test_stream_is_rejected_not_silently_downgraded |
+| 上游 4xx | 照实回报上游原文，**不重试** | test_upstream_error_is_reported_verbatim_and_not_retried |
+| 连接错误 | 重试到上限（attempts=max） | test_connect_error_is_retried_up_to_max_attempts |
+| 读超时 | **不重试**（避免重复计费），attempts=1 | test_read_timeout_is_not_retried |
+| 触发限流 | 429 / `rate_limited` | test_rate_limit_placeholder_blocks_then_recovers |
+| 请求体非 JSON / 非对象 | 400 / `bad_json` / `bad_payload` | test_http_bad_payloads_are_400 |
+
+不泄密（两个方向都测）：
+- `test_key_never_leaks`：key 不出现在 /health、错误消息里；
+- `test_key_is_sent_as_bearer_to_upstream`：对照证明 key 确实用上了（否则"不泄密"就变成"没用上"）。
+
+
+边界声明（按 Issue 的「不要做」）
+================================
+- **不做提示词工程**：请求体除 `model` 外原样转发（test_request_body_is_forwarded_untouched_except_model）。
+- **不做多轮对话编排**：网关不保存任何会话状态。
+- **不把 key 写进仓库**：`.env` 本地文件（`git check-ignore -v .env` → `.gitignore:9:.env`），
+  仓库里只有 `.env.example` 占位。
+
+
+自报的两处需要评审知道
+======================
+1. **扩展了 `dip_core.config.Settings`（新增 5 个字段，全部带默认值、向后兼容）**，
+   而不是在网关里另起一套配置读取 —— 因为该模块的定位就是"配置只有一处真相"，
+   `apps/portal-api/.../settings.py` 也明确写了"避免两处配置真相"。
+2. **与 v1 的 ADR-0004 相反**：ADR-0004 是"未配 key 进规则模式"，而本项按
+   《v2 项目规划 v1》§6「已决定不保留无模型降级」实现 —— 未配 key 一律 503 明确报错。
+   这是 v2 有意推翻 v1 的决定，已在 `dip_core/config.py` 的注释与 PR 里写明。
+   顺带说清：`.env` 读到的 key 是我从本机 Hermes 配置里取的（**未打印、未入库**），
+   仅用于一次真实调用验证；正式使用请换成项目自己的 key。
+
+
+门禁
+====
+$ bash ops/gate.sh
+== lint（ruff）
+All checks passed!
+   ✅ PASS
+== 测试（pytest）
+   ✅ PASS
+
+GATE: ALL_PASS
