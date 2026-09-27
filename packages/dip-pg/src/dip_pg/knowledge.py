@@ -1,9 +1,11 @@
-"""知识候选池与入库落点的访问层（工作项 M3-01 / Issue #12）。
+"""知识候选池与入库落点的访问层（工作项 M3-01 / Issue #12；版本与回滚在 M3-02 / #13）。
 
-**只新增两张表**，`store.py`（判定留痕）与既有 `sessions` / `messages` / `audit_log` 一个字不动：
+**只新增三张表**，`store.py`（判定留痕）与既有 `sessions` / `messages` / `audit_log` 一个字不动：
 
 - `knowledge_candidates`：候选池。谁提的、提了什么、谁审的、审成什么、什么时候进的库。
-- `knowledge_metrics`：**入库落点**（平台侧结构化通道的口径库）。只有过了质量门禁的候选才能在这里出现一行。
+- `knowledge_metrics`：**入库落点**（平台侧结构化通道的口径库）。只有过了质量门禁的候选才能在这里出现一行；
+  同一 `subject` 按 `version` 留多行，**同一时刻只有一行为 `active`**（partial unique index 保证）。
+- `knowledge_metric_history`：版本事件流水（进版 / 被取代 / 被回滚 / 重新生效），#13 的「历史表」。
 
 本模块最要紧的一条设计：**质量门禁落在库层，不只是接口层**。
 `knowledge_candidates` 与 `knowledge_metrics` 都带 `CHECK` 约束 ——
@@ -11,13 +13,17 @@
 存在一行没有来源脚本的口径。这样"绕过接口直接写库"（验收真正要防的那条路）也堵死了，
 而不是靠每个调用点自觉。接口层的校验只负责把"为什么进不去"讲清楚。
 
-第二条：**入库是事务**（`conn.transaction()`）。写口径行与改候选状态要么都成、要么都不成 ——
-不允许出现"口径进去了但候选还停在 approved"这种对不上账的中间态。
+第二条：**入库是事务**（`conn.transaction()`）。取版本号、降级旧版本、写口径行、改候选状态、写历史
+要么都成、要么都不成 —— 不允许出现"口径进去了但候选还停在 approved"或"版本号取了却没入库"这种对不上账的中间态。
 `psycopg` 的 `Connection.transaction()` 在 autocommit 连接上也能开显式事务，
 所以这里继续复用 `store.connect()`（DSN 规则与连接超时只维护一份）。
 
 第三条：`record_*` 沿用 #9 的约定 —— **落库失败不抛异常**，返回 `Persisted(ok=False, error=...)`，
 让接口把"没落上"如实告诉用户。
+
+第四条（#13）：建表语句里带的 `alter table ... add column if not exists` / `drop constraint if exists` 是
+**给已经存在的库补列与换约束**用的（ADR-0005：表少、字段稳定，先不上迁移工具）。
+`create table if not exists` 对老库是 no-op，光靠它补不出新列。
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from .metric_versions import EVENT_ENTERED, EVENT_SUPERSEDED, record_event
 from .store import Persisted, connect
 from .store import available as _db_available
 
@@ -92,12 +99,15 @@ create table if not exists knowledge_metrics (
   depends_on    jsonb not null default '[]'::jsonb,
   source_script text not null,
   source_line   int,
-  version       int not null default 1,              -- 版本与回滚是 M3-02（#13）；这里只落地第 1 版
-  status        text not null default 'active',
+  version       int not null default 1,              -- 同一 subject 内自增（M3-02 / #13 的版本号规则）
+  status        text not null default 'active',      -- active / superseded / rolled_back
   approved_by   text not null,
   note          text,
   created_at    timestamptz not null default now(),
-  -- 库里不可能存在「没有来源脚本」的口径 —— 这是本 Issue 的验收，钉在库层
+  rolled_back_at   timestamptz,                      -- 被回滚降级的时间（谁、为什么见下面两列）
+  rolled_back_by   text,
+  rollback_reason  text,
+  -- 库里不可能存在「没有来源脚本」的口径 —— 这是 M3-01 的验收，钉在库层
   constraint knowledge_metrics_source_required_chk
     check (
       coalesce(btrim(source_script), '') <> ''
@@ -105,10 +115,61 @@ create table if not exists knowledge_metrics (
       and depends_on <> '[]'::jsonb
     ),
   constraint knowledge_metrics_version_chk check (version >= 1),
-  constraint knowledge_metrics_status_chk check (status in ('active', 'rolled_back'))
+  constraint knowledge_metrics_status_chk check (status in ('active', 'superseded', 'rolled_back')),
+  -- 回滚也要说清楚：谁把它撤下来的、为什么（说不清的回滚与说不清的拒绝同样不可接受）
+  constraint knowledge_metrics_rollback_trace_chk
+    check (
+      status <> 'rolled_back' or (
+        rolled_back_at is not null
+        and coalesce(btrim(rolled_back_by), '') <> ''
+        and coalesce(btrim(rollback_reason), '') <> ''
+      )
+    )
 );
 create index if not exists idx_kb_metrics_subject on knowledge_metrics(subject, version desc);
 create index if not exists idx_kb_metrics_candidate on knowledge_metrics(candidate_id);
+
+-- 补列（已存在的库）：M3-01 建的表没有回滚留痕三列
+alter table knowledge_metrics add column if not exists rolled_back_at  timestamptz;
+alter table knowledge_metrics add column if not exists rolled_back_by  text;
+alter table knowledge_metrics add column if not exists rollback_reason text;
+-- 状态值域扩容（M3-01 只有 active/rolled_back）：先删后加，保证幂等
+alter table knowledge_metrics drop constraint if exists knowledge_metrics_status_chk;
+alter table knowledge_metrics add  constraint knowledge_metrics_status_chk
+  check (status in ('active', 'superseded', 'rolled_back'));
+alter table knowledge_metrics drop constraint if exists knowledge_metrics_rollback_trace_chk;
+alter table knowledge_metrics add  constraint knowledge_metrics_rollback_trace_chk
+  check (
+    status <> 'rolled_back' or (
+      rolled_back_at is not null
+      and coalesce(btrim(rolled_back_by), '') <> ''
+      and coalesce(btrim(rollback_reason), '') <> ''
+    )
+  );
+-- **同一口径同时只能有一个生效版本**：库层不变量，partial unique index 兜住
+create unique index if not exists uq_kb_metrics_one_active
+  on knowledge_metrics(subject) where status = 'active';
+"""
+
+HISTORY_SCHEMA = """
+-- 版本历史（M3-02 / #13 的「历史表」）：每次版本状态变化一行，谁、什么时候、从哪版到哪版、为什么
+create table if not exists knowledge_metric_history (
+  id              bigserial primary key,
+  metric_id       bigint not null references knowledge_metrics(id),
+  subject         text not null,
+  version         int not null,
+  event           text not null,        -- entered / superseded / rolled_back / reactivated
+  related_version int,                  -- 因为哪一版（取代它的 / 回到的那版）
+  actor           text not null,
+  reason          text,
+  created_at      timestamptz not null default now(),
+  constraint knowledge_metric_history_event_chk
+    check (event in ('entered', 'superseded', 'rolled_back', 'reactivated')),
+  -- 回滚必须写明原因（与"拒绝必须说明原因"同一条道理）
+  constraint knowledge_metric_history_reason_chk
+    check (event <> 'rolled_back' or coalesce(btrim(reason), '') <> '')
+);
+create index if not exists idx_kb_metric_history_subject on knowledge_metric_history(subject, id desc);
 """
 
 CANDIDATE_COLUMNS = (
@@ -119,7 +180,7 @@ CANDIDATE_COLUMNS = (
 
 METRIC_COLUMNS = (
     "id, candidate_id, subject, chinese_name, formula, depends_on, source_script, source_line, "
-    "version, status, approved_by, note, created_at"
+    "version, status, approved_by, note, created_at, rolled_back_at, rolled_back_by, rollback_reason"
 )
 
 
@@ -134,10 +195,11 @@ class ReviewOutcome:
 
 
 def init_knowledge_schema() -> None:
-    """幂等建表（两张）。**只在 startup 调**，别放 import 期（P0-3：会把测试收集也拖挂）。"""
+    """幂等建表（三张）+ 给老库补列换约束。**只在 startup 调**，别放 import 期（P0-3：会把测试收集也拖挂）。"""
     with connect() as conn, conn.cursor() as cur:
         cur.execute(CANDIDATE_SCHEMA)
         cur.execute(METRIC_SCHEMA)
+        cur.execute(HISTORY_SCHEMA)
 
 
 def available() -> bool:
@@ -264,8 +326,13 @@ def mark_reviewed(
 def ingest(*, candidate_id: int, ingested_by: str, problems: list[dict[str, str]] | None = None) -> Persisted:
     """把已批准的候选写进口径库（`knowledge_metrics`），并把候选置为 `ingested`。
 
-    一个事务里做三件事：**锁行 → 校验状态 → 写口径行 + 改候选状态**。
-    任何一步失败都整体回滚，不会留下"口径进了库、候选还停在 approved"的错账。
+    一个事务里做五件事：**锁行 → 校验状态 → 取号（版本自增）→ 降级旧版本 → 写口径行 + 改候选状态 + 写历史**。
+    任何一步失败都整体回滚，不会留下"口径进了库、候选还停在 approved"或"版本号取了但没入库"的错账。
+
+    **版本号规则（M3-02 / #13）**：同一 `subject` 内 `version = max(version) + 1`；
+    新版本入库时把该主体的旧生效版本降级为 `superseded`（先降级再插入 ——
+    否则会同时存在两条 `active`，被 `uq_kb_metrics_one_active` 当场拒绝）。
+    顺带说明：**降级必须发生在插入之前**，这是那个 partial unique index 要求的顺序，不是随手写的。
 
     ``problems`` 只用于把"接口判定的拒绝原因"落进候选行做留痕（例如缺来源脚本），
     真正的拒绝在事务外由接口层决定；这里仍会**再确认一次状态**，因为锁行之前的状态可能已经变了。
@@ -273,30 +340,50 @@ def ingest(*, candidate_id: int, ingested_by: str, problems: list[dict[str, str]
     try:
         with connect() as conn, conn.transaction(), conn.cursor() as cur:
             cur.execute(
-                "select status from knowledge_candidates where id = %s for update", (candidate_id,)
+                "select status, subject from knowledge_candidates where id = %s for update",
+                (candidate_id,),
             )
             row = cur.fetchone()
             if row is None:
                 return Persisted(ok=False, error=E_NOT_FOUND)
-            status = row[0]
+            status, subject = row[0], row[1]
             if status == "ingested":
                 return Persisted(ok=False, error=E_ALREADY_INGESTED)
             if status != "approved":
                 return Persisted(ok=False, error=E_NOT_APPROVED)
 
+            # 取号：这一版是第几版
+            cur.execute("select coalesce(max(version), 0) + 1 from knowledge_metrics where subject = %s",
+                        (subject,))
+            version = int(cur.fetchone()[0])
+
+            # 降级旧版本（先降级，再插入 —— 见上面 docstring）
+            cur.execute(
+                """update knowledge_metrics set status = 'superseded'
+                    where subject = %s and status = 'active'
+                  returning id, version""",
+                (subject,),
+            )
+            for prev_id, prev_version in cur.fetchall():
+                record_event(cur, metric_id=int(prev_id), subject=subject, version=int(prev_version),
+                             event=EVENT_SUPERSEDED, actor=ingested_by, related_version=version)
+
             cur.execute(
                 """insert into knowledge_metrics
                       (candidate_id, subject, chinese_name, formula, depends_on, source_script,
-                       source_line, approved_by, note)
+                       source_line, version, status, approved_by, note)
                     select id, subject, chinese_name, formula, depends_on, source_script,
-                           source_line, %s, note
+                           source_line, %s, 'active', %s, note
                       from knowledge_candidates where id = %s
                     returning id""",
-                (ingested_by, candidate_id),
+                (version, ingested_by, candidate_id),
             )
             metric_row = cur.fetchone()
             if metric_row is None:
                 return Persisted(ok=False, error=E_NOT_FOUND)
+
+            record_event(cur, metric_id=int(metric_row[0]), subject=subject, version=version,
+                         event=EVENT_ENTERED, actor=ingested_by)
 
             _mark_ingested(cur, candidate_id=candidate_id, ingested_by=ingested_by, problems=problems)
             return Persisted(ok=True, id=int(metric_row[0]))
